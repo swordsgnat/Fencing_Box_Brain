@@ -29,7 +29,7 @@
 //============
 // #defines
 //============
-#define DEBUG 0 // 1 == weapon testing 
+#define DEBUG 0 // 1 == weapon testing, 2 = main loop timing
 
 //============
 // #includes
@@ -93,7 +93,7 @@ enum mode
 const unsigned long MICROS_IN_SEC                       = 1000000;                // conversion constant; "avoiding magic numbers"
 const unsigned long BUZZER_DURATION_MICROS              = 1 * MICROS_IN_SEC;      // length of time the buzzer is kept on after a hit (microseconds)
 const unsigned long LIGHT_DURATION_MICROS               = 3 * MICROS_IN_SEC;      // length of time the lights are kept on after a hit ((microseconds)
-const unsigned long BAUDRATE                            = 9600;                  // baudrate of the serial debug interface
+const unsigned long BAUDRATE                            = 57600;//9600;                  // baudrate of the serial debug interface
 const unsigned long CLOCK_ADJUSTMENT_RATE_TICK_MICROS   = 0.333 * MICROS_IN_SEC;  // how fast the time increments / decrements when the corresponding button is held down
 const unsigned long CLOCK_ADJUSTMENT_RATE_CHANGE_MICROS = 2 * MICROS_IN_SEC;      // how fast the time increments / decrements increase in size when the corresponding button is held down
 const unsigned long CLOCK_ADJUSTMENT_LEVEL_MICROS_ []   = { 1  * MICROS_IN_SEC,
@@ -122,12 +122,15 @@ const unsigned long FOIL_CONTACT_MICROS_   = 13000;
 const unsigned long EPEE_CONTACT_MICROS_   = 2000;
 
 // Analog read constants (may need tuning)
-const unsigned long ANALOG_READ_ON_TARGET_THRESHOLD_LOW_      = 450;//400;
-const unsigned long ANALOG_READ_ON_TARGET_THRESHOLD_HIGH_     = 600;//600;
+const unsigned long ANALOG_READ_ON_TARGET_THRESHOLD_LOW_            = 450;//400;
+const unsigned long ANALOG_READ_ON_TARGET_THRESHOLD_HIGH_           = 600;//600;
 const unsigned long ANALOG_READ_ON_TARGET_THRESHOLD_LOW_SABER_      = 300;//400;
 const unsigned long ANALOG_READ_ON_TARGET_THRESHOLD_HIGH_SABER_     = 450;//600;
-const unsigned long ANALOG_READ_OFF_TARGET_B_THRESHOLD_HIGH_  = 100;//100;
-const unsigned long ANALOG_READ_OFF_TARGET_A_THRESHOLD_LOW_   = 900;//900;
+const unsigned long ANALOG_READ_OFF_TARGET_B_THRESHOLD_HIGH_        = 100;//100;
+const unsigned long ANALOG_READ_OFF_TARGET_A_THRESHOLD_LOW_         = 900;//900;
+
+// Debugging constants
+const unsigned long CYCLES_PER_TIMING_EVENT_ = 1000; 
 
 //=============================
 // Data Members and Attributes
@@ -177,8 +180,6 @@ unsigned long left_fencer_weapon_prong_  = 0;
 unsigned long right_fencer_weapon_prong_ = 0;
 unsigned long left_fencer_lame_prong_    = 0;
 unsigned long right_fencer_lame_prong_   = 0;
-// unsigned long left_fencer_ground_prong_  = 0; TODO don't need these?
-// unsigned long right_fencer_ground_prong_ = 0; TODO don't need these?
 
 // hit interpretation variables
 unsigned long left_fencer_contact_time_               = 0;
@@ -194,6 +195,11 @@ bool          left_fencer_hit_on_target_              = false;
 bool          left_fencer_hit_off_target_             = false;
 bool          right_fencer_hit_on_target_             = false;
 bool          right_fencer_hit_off_target_            = false;
+
+// Debugging variables
+unsigned long timing_event_start_micros_              = 0;
+unsigned long cycles_passed_                          = 0; 
+unsigned long total_summed_elapsed_micros_            = 0; 
 
 //================
 // Configuration
@@ -262,14 +268,14 @@ void loop()
     unsigned long elapsed_time = get_micros_elapsed_since_last_loop();
 
     // update all major components on time elapsed
-    scoreboard_ ->tick(elapsed_time);
-    clock_      ->tick(elapsed_time);
-    buzzer_     ->tick(elapsed_time);
-    lights_     ->tick(elapsed_time);
+    scoreboard_ ->tick(elapsed_time);   // TODO TODO NB this one line is like 0.69 milliseconds per cycle even after basic SSD redundancy check 
+    clock_      ->tick(elapsed_time);   // TODO TODO NB this one line is like 0.45 milliseconds per cycle even after basic SSD redundancy check 
+    buzzer_     ->tick(elapsed_time);   // TODO TODO NB this line doesn't do anything to the timing; makes sense as it's a no-op I think 
+    lights_     ->tick(elapsed_time);   // TODO TODO NB this line doesn't do anything to the timing; makes sense as it's a no-op I think 
 
     // check user inputs and act on them
     handle_remote_input(elapsed_time);
-    handle_clock_adjustment_buttons(elapsed_time);
+    handle_clock_adjustment_buttons(elapsed_time);  // NB all the button methods so far are a total of 0.06 ms per cycle. Not huge! 
     handle_mode_switch_button();
     //handle_quiet_mode_button();
 
@@ -300,6 +306,38 @@ void loop()
 
     // react to equipment inputs as necessary
     signal_hits(elapsed_time);
+
+    // main loop timing investigation
+    if (DEBUG == 2)
+    {
+      if (cycles_passed_ == 0)
+      {
+        timing_event_start_micros_ = micros();
+        Serial.println("Timing...");
+      }
+      else if (cycles_passed_ == CYCLES_PER_TIMING_EVENT_)
+      {
+        unsigned long curr_time = micros();
+        float millis_per_cycle    = ((float)curr_time - (float)timing_event_start_micros_) / ((float)CYCLES_PER_TIMING_EVENT_ * 1000); // microsecs per millisec, being lazy 
+        Serial.print("Milliseconds Per Cycle Average For Last ");
+        Serial.print(CYCLES_PER_TIMING_EVENT_);
+        Serial.print(" Cycles: ");
+        Serial.print(millis_per_cycle);
+        Serial.print("\tTotal Microseconds: ");
+        Serial.print((curr_time - timing_event_start_micros_));
+        Serial.print("\tTotal Summed Microseconds: ");
+        Serial.print(total_summed_elapsed_micros_);
+        Serial.print("\tDifference: ");
+        Serial.print((float)(curr_time - timing_event_start_micros_) - (float)total_summed_elapsed_micros_);
+        Serial.println("");
+        cycles_passed_                = 0; 
+        timing_event_start_micros_    = curr_time;
+        total_summed_elapsed_micros_  = 0; 
+      }     
+      cycles_passed_++; 
+      total_summed_elapsed_micros_  += elapsed_time; 
+
+    }
   }
 }
 
