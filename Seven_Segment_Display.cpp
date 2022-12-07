@@ -13,7 +13,7 @@
 // TODO TODO TODO anyone storing a micro time value needs to be unsigned long, not int!!!!
 // TODO TODO TODO add version numbers to everything
 // TODO TODO TODO make sure to take all these version of files  (incl TM1637) to the big file 
-// TODO could do a "only update display if there's a change" in the future if display is taking a lot of time or something
+// TODO could do a "only update display if there's a change" in the future if display is taking a lot of time or something IT SURE THE HECK IS 
 // TODO should nominally check if I can change brightness mid-stream  
 
 // Constructor 
@@ -44,7 +44,7 @@ void Seven_Segment_Display::tick(unsigned long elapsed_micros)
   if (this->override_lifespan_micros == 0) // i.e., there's no active high-priority message
   {
     // push the normal message to the display
-    this->controlled_display_->direct_display(current_display_contents_);
+    this->send_to_display(current_display_contents_); 
   }
   else // i.e., there's an active high-priority message 
   {
@@ -61,12 +61,12 @@ void Seven_Segment_Display::tick(unsigned long elapsed_micros)
       this->override_age_in_micros   = 0; 
 
       // push the normal message to the display
-      this->controlled_display_->direct_display(current_display_contents_);
+      this->send_to_display(current_display_contents_); 
     }
     else // i.e., the override message hasn't expired 
     {
       // push the override message to the display
-      this->controlled_display_->direct_display(override_display_contents_);   
+      this->send_to_display(override_display_contents_);  
     }   
   }
 }
@@ -268,4 +268,39 @@ uint8_t Seven_Segment_Display::get_display_code_for_character(char character)
   }
 
   return return_val; 
+}
+
+// helper method, compares two uint8_t arrays for identical contents (TODO only checks up to display size, TODO just use std::vectors...)
+bool Seven_Segment_Display::check_uint8_t_arrays_for_same_contents(uint8_t first[], uint8_t second[])
+{
+  bool return_val = true; 
+
+  for(uint8_t i = 0; i < this->DISPLAY_SIZE_; i++)
+  {
+    if(first[i] != second[i]) 
+    {
+      return_val = false; 
+      break;
+    }
+  }
+
+  return return_val;
+}
+
+
+// helper method, simplifies some calls and does redundancy checking 
+void Seven_Segment_Display::send_to_display(uint8_t contents_to_display[])
+{
+  // only bother updating if the contents of the display would be new 
+  if( !this->check_uint8_t_arrays_for_same_contents(contents_to_display, this->most_recently_displayed_contents_) )
+  {
+    // actually send the contents to the display 
+    this->controlled_display_->direct_display(contents_to_display);
+
+    // update the most recently displayed data 
+    for(uint8_t i = 0; i < this->DISPLAY_SIZE_; i++)
+    {
+      this->most_recently_displayed_contents_[i] = contents_to_display[i]; 
+    }
+  }
 }

@@ -92,6 +92,15 @@ class Seven_Segment_Display
 
     // helper method - translates characters to their seven-segment display byte equivalent, if one exists  
     uint8_t get_display_code_for_character(char character);
+
+    // helper method, compares two uint8_t arrays for identical contents 
+    bool check_uint8_t_arrays_for_same_contents(uint8_t first[], uint8_t second[]); 
+
+    // keeping track of what's already up there to avoid redundancy  
+    uint8_t most_recently_displayed_contents_ [DISPLAY_SIZE_]   = {0x00,0x00,0x00,0x00};
+
+    // helper method, simplifies some calls and does redundancy checking 
+    void send_to_display(uint8_t contents_to_display[]);
 };
 
 #endif 
