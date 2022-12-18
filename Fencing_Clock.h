@@ -1,8 +1,8 @@
 //============================================================================//
 //  Desc    : C++ Interface for a Fencing Timer                               //
 //  Dev     : Nate Cope,                                                      //
-//  Version : 1.0                                                             //
-//  Date    : Sept 2022                                                       //
+//  Version : 1.1                                                             //
+//  Date    : Dec 2022                                                        //
 //  Notes   :                                                                 //
 //                                                                            // 
 //============================================================================//
@@ -26,10 +26,11 @@ class Fencing_Clock
     // Destructor
     ~Fencing_Clock();
 
-    // Lets the object know how much time has passed. For the sake of streamlining 
+    // Lets the object know what the current time is. For the sake of streamlining 
     // the main code, this class should never check the time or call any sort of delay function,
-    // but rely on this method to tell it how much time has passed, and update that way. 
-    void tick(int elapsed_micros); 
+    // but rely on this method to tell it what the time is, and update that way. 
+    // if "0" is passed in specifically, we're just updating the display, and no time checks are done 
+    void tick(unsigned long current_time_micros); 
 
     // Set the clock to be running
     void start();
@@ -63,14 +64,20 @@ class Fencing_Clock
     const unsigned long STARTING_MICROS_        = 3  * SECS_IN_MIN_ * MICROS_IN_SEC_; 
     const unsigned long MAX_MICROS_             = 70 * SECS_IN_MIN_ * MICROS_IN_SEC_; // due to unsigned long constraints  
 
-    // track the clock's active status 
-    boolean is_running_; 
+    // track the clock's active status; we want to begin with the clock paused 
+    boolean is_running_ = false;  
 
     // track how much is left on the timer 
-    unsigned long current_clock_time_micros_; 
+    unsigned long current_clock_time_micros_ = this->STARTING_MICROS_; 
 
     // helper method; make conversion from unformatted microseconds to human-readable time string easy  
     String get_time_string_from_micros(unsigned long microsecs);
+
+    // track the time since we started to do time math better 
+    unsigned long time_of_most_recent_start_        = 0; 
+
+    // track the time we're told about to make stopping and starting simpler
+    unsigned long most_recently_seen_external_time_ = 0; 
 };
 
 #endif 

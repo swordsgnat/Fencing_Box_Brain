@@ -1,9 +1,9 @@
 //===========================================================================//
-//  Desc:    C++ Implementation for a RBG Ring Fencing Light Set             //
-//  Dev:     Nate Cope,                                                      //
-//  Date:    Nov 2022                                                        //
-//  Notes:                                                                   //
-//                                                                           // 
+//  Desc    : C++ Implementation for a RBG Ring Fencing Light Set            //
+//  Dev     : Nate Cope,                                                     //
+//  Date    : Dec 2022                                                       //
+//  Version : 1.1                                                            //
+//  Notes   :                                                                //
 //===========================================================================//
 
 // interface includes
@@ -29,14 +29,15 @@ Fencing_Light_Displays::~Fencing_Light_Displays()
 
     
 
-// Lets the object know how much time has passed-> For the sake of streamlining 
+// Lets the object know what the current time is. For the sake of streamlining 
 // the main code, this class should never check the time or call any sort of delay function,
-// but rely on this method to tell it how much time has passed, and update that way-> 
-void Fencing_Light_Displays::tick(int elapsed_micros)
+// but rely on this method to tell it what the time is, and update that way. 
+// if "0" is passed in specifically, we're just updating the displays, and no time checks are done 
+void Fencing_Light_Displays::tick(unsigned long current_time_micros)
 {
   // currently no-op
-  this->left_fencer_light_ ->tick(elapsed_micros);
-  this->right_fencer_light_->tick(elapsed_micros);
+  this->left_fencer_light_ ->tick(current_time_micros);
+  this->right_fencer_light_->tick(current_time_micros);
 }
     
 

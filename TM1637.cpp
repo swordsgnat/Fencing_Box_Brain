@@ -116,7 +116,7 @@ void TM1637::direct_display(uint8_t DispData[])
 {
   const uint8_t DISPLAY_SIZE = 4;
   uint8_t i;
-  this->start();                // start signal sent to TM1637 from MCU
+  this->start();                
   this->writeByte(ADDR_AUTO);
   this->stop();           
   this->start();          
@@ -125,10 +125,10 @@ void TM1637::direct_display(uint8_t DispData[])
   {
     this->writeByte(DispData[i]); 
   }
-  stop();           
-  start();          
-  writeByte(Cmd_DispCtrl);
-  stop();           
+  this->stop();           
+  this->start();          
+  this->writeByte(Cmd_DispCtrl);
+  this->stop();           
 }
 //******************************************
 void TM1637::display(uint8_t BitAddr,int8_t DispData)

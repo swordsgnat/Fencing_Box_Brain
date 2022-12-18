@@ -1,8 +1,8 @@
 //============================================================================//
 //  Desc    : C++ Implementation for a buzzer                                 //
 //  Dev     : Nate Cope,                                                      //
-//  Version : 1.0                                                             //
-//  Date    : Nov 2022                                                        //
+//  Version : 1.1                                                             //
+//  Date    : Dec 2022                                                        //
 //  Notes   :                                                                 //
 //                                                                            // 
 //============================================================================//
@@ -34,10 +34,11 @@ Buzzer::Buzzer(uint8_t control_pin)
 }
 
 
-// Lets the object know how much time has passed. For the sake of streamlining 
+// Lets the object know what the current time is. For the sake of streamlining 
 // the main code, this class should never check the time or call any sort of delay function,
-// but rely on this method to tell it how much time has passed, and update that way. 
-void Buzzer::tick(int elapsed_micros)
+// but rely on this method to tell it what the time is, and update that way. 
+// if "0" is passed in specifically, we're just updating, and no time checks are done 
+void Buzzer::tick(unsigned long current_time_micros)
 {
   // currently no-op - tone() doesn't block, somehow!
 }
