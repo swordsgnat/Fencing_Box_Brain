@@ -1,8 +1,8 @@
 //============================================================================//
 //  Desc    : C++ Implementation for a four-character, seven-segment display  //
 //  Dev     : Nate Cope,                                                      //
-//  Version : 1.0                                                             //
-//  Date    : Nov 2022                                                        //
+//  Version : 1.1                                                             //
+//  Date    : Dec 2022                                                        //
 //  Notes   : - All display updating should be done via tick(0)               //
 //            to centralize message processing in one spot                    // 
 //============================================================================//
@@ -11,8 +11,6 @@
 #include "Seven_Segment_Display.h"
 
 // TODO TODO TODO anyone storing a micro time value needs to be unsigned long, not int!!!!
-// TODO TODO TODO add version numbers to everything
-// TODO TODO TODO make sure to take all these version of files  (incl TM1637) to the big file 
 // TODO could do a "only update display if there's a change" in the future if display is taking a lot of time or something IT SURE THE HECK IS 
 // TODO should nominally check if I can change brightness mid-stream  
 
@@ -36,29 +34,38 @@ Seven_Segment_Display::~Seven_Segment_Display()
   delete this->controlled_display_ ;      
 }
 
-// Lets the object know how much time has passed. For the sake of streamlining 
+// Lets the object know what the current time is. For the sake of streamlining 
 // the main code, this class should never check the time or call any sort of delay function,
-// but rely on this method to tell it how much time has passed, and update that way. 
-void Seven_Segment_Display::tick(unsigned long elapsed_micros)
+// but rely on this method to tell it what the time is, and update that way. 
+// if "0" is passed in specifically, we're just updating the display, and no time checks are done 
+void Seven_Segment_Display::tick(unsigned long current_time_micros)
 {
-  if (this->override_lifespan_micros == 0) // i.e., there's no active high-priority message
+  // track the new timestamp unless we're just updating 
+  if (current_time_micros != 0)
+  {
+    this->most_recently_seen_external_time_ = current_time_micros; 
+  }
+
+  if (this->override_birth_time_ == 0) // i.e., there's no active high-priority message
   {
     // push the normal message to the display
     this->send_to_display(current_display_contents_); 
   }
   else // i.e., there's an active high-priority message 
   {
-    // update the age appropriately 
-    this->override_age_in_micros += elapsed_micros; 
-
+    if (current_time_micros == 0) // if this is just an update
+    {
+      // push the override message to the display
+      this->send_to_display(override_display_contents_);  
+    }
     // check for override expiration 
-    if (this->override_age_in_micros > this->override_lifespan_micros) // i.e. the high-priorty message just "died" (expired) 
+    else if ((unsigned long)(current_time_micros - this->override_birth_time_) > this->override_lifespan_micros_) // i.e. the high-priorty message just "died" (expired) 
     {
       // render the lifespan invalid so we don't go through these checks unnecessarily 
-      this->override_lifespan_micros = 0; 
+      this->override_lifespan_micros_ = 0; 
 
-      // reset the age, too 
-      this->override_age_in_micros   = 0; 
+      // reset the start time, too 
+      this->override_birth_time_      = 0; 
 
       // push the normal message to the display
       this->send_to_display(current_display_contents_); 
@@ -93,6 +100,8 @@ void Seven_Segment_Display::set_display_contents( String        data            
 {
   uint8_t message_length = data.length() < this->DISPLAY_SIZE_ ? data.length() : this->DISPLAY_SIZE_;
 
+  // TODO TODO TODO NEED check on redundancy here somewhere too I think 
+
   if (will_override) // if this is a priority message 
   {
     // zero out any old priority message info 
@@ -113,10 +122,10 @@ void Seven_Segment_Display::set_display_contents( String        data            
     }
 
     // set the lifespan
-    this->override_lifespan_micros = override_duration_micros; 
+    this->override_lifespan_micros_ = override_duration_micros; 
 
     // zero the age (it just got born!) 
-    this->override_age_in_micros = 0;
+    this->override_birth_time_      = this->most_recently_seen_external_time_;
    
   }
   else // just a normal message 
@@ -139,9 +148,6 @@ void Seven_Segment_Display::set_display_contents( String        data            
     }
   }
 
-
-
-
   // update everything through the one central update channel 
   // (with no time pasage - we're just updating)
   this->tick(0); 
@@ -163,6 +169,7 @@ void Seven_Segment_Display::set_brightness(uint8_t level)
   this->tick(0); 
 }
 
+
 //
 //  private methods 
 //
@@ -175,6 +182,7 @@ void Seven_Segment_Display::clear_display_contents()
     this->current_display_contents_[i] = 0x00; 
   }
 }
+
 
 // helper method to zero out override display storage
 void Seven_Segment_Display::clear_override_display_contents()
@@ -269,6 +277,7 @@ uint8_t Seven_Segment_Display::get_display_code_for_character(char character)
 
   return return_val; 
 }
+
 
 // helper method, compares two uint8_t arrays for identical contents (TODO only checks up to display size, TODO just use std::vectors...)
 bool Seven_Segment_Display::check_uint8_t_arrays_for_same_contents(uint8_t first[], uint8_t second[])

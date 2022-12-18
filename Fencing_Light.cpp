@@ -1,13 +1,16 @@
 //===========================================================================//
-//  Desc:    C++ Implementation for a RBG Ring Fencing Light                 //
-//  Dev:     Nate Cope,                                                      //
-//  Date:    Nov 2022                                                        //
-//  Notes:   TODO a show-off on time running out, too??                      //
-//           TODO cool animation methods and resulting necessary tick method // 
+//  Desc    : C++ Implementation for a RBG Ring Fencing Light                //
+//  Dev     : Nate Cope,                                                     //
+//  Date    : Dec 2022                                                       //
+//  Version : 1.1                                                            //
+//  Notes   : TODO a show-off on time running out, too??                     //
+//            TODO cool animation methods and resulting tick method          // 
 //===========================================================================//
 
 // interface includes
 #include "Fencing_Light.h"
+
+// TODO TODO TODO redundancy color checks! 
 
 // Constructor 
 //    uint8_t control_pin - the Arduino pin control terminal of the fencing light  
@@ -38,10 +41,11 @@ Fencing_Light::~Fencing_Light()
   delete this->led_ring_;      
 }
 
-// Lets the object know how much time has passed. For the sake of streamlining 
+// Lets the object know what the current time is. For the sake of streamlining 
 // the main code, this class should never check the time or call any sort of delay function,
-// but rely on this method to tell it how much time has passed, and update that way. 
-void Fencing_Light::tick(int elapsed_micros)
+// but rely on this method to tell it what the time is, and update that way. 
+// if "0" is passed in specifically, we're just updating the display, and no time checks are done 
+void Fencing_Light::tick(unsigned long current_time_micros)
 {
   // currently NO-OP
 }
@@ -71,13 +75,13 @@ void Fencing_Light::light_up_white()
 // Show the "touching own lame" signal  
 void Fencing_Light::light_up_short_circuit_light()
 {
-  //  set some ARBITRARY oattern (currently a square of 1, 5, 9, 13) to white
+  //  set some ARBITRARY pattern (currently a square of 1, 5, 9, 13) to white
   this->led_ring_->setPixelColor( 1,  this->get_color_code(this->color::WHITE) );      
   this->led_ring_->setPixelColor( 5,  this->get_color_code(this->color::WHITE) );   
   this->led_ring_->setPixelColor( 9,  this->get_color_code(this->color::WHITE) );      
   this->led_ring_->setPixelColor( 13, this->get_color_code(this->color::WHITE) );     
   
-  //  Update ring to match set colors 
+  //  Update ring to match set colors TODO TODO redundancy check 
   this->led_ring_->show();  
 }
 
@@ -124,6 +128,9 @@ void Fencing_Light::show_off_on_labelle()
 //  to the provided color (provided as an enum)
 void Fencing_Light::set_all_leds_to_color(color color_enum_val)
 {
+
+  // TODO TODO TODO redundancy check... 
+  
   // For each pixel in strip...
   for (int i = 0; i < this->led_ring_->numPixels(); i++) 
   { 

@@ -3,8 +3,8 @@
 //  Desc:    Arduino Code to Implement a Fencing Scoring Machine             //
 //  Dev:     Wnew (base), Nate Cope (updates)                                //
 //  Date:    Nov  2012 (base)                                                //
-//  Updated: Sept 2015 (base),Sept 2022 (updates)                            //
-//  Version: 2.0                                                             //
+//  Updated: Sept 2015 (base),Sept-Dec 2022 (updates)                        //
+//  Version: 2.1                                                             //
 //  Notes:   1. Basis of algorithm from digitalwestie on github. Thanks Mate //
 //           2. Used uint8_t instead of unsigned long where possible to      //
 //              optimise                                                     //
@@ -23,8 +23,7 @@
 // TODO loop()'s order has to be figured out...
 // TODO labelle checks, someday
 // TODO explain the fucken var_ vs. var thing
-// TODO short circuit lights, someday
-// TODO debugs!! levels!!
+// TODO why are the off / on target args unsigned longs??
 
 //============
 // #defines
@@ -136,9 +135,6 @@ const unsigned long CYCLES_PER_TIMING_EVENT_ = 1000;
 // Data Members and Attributes
 //=============================
 
-// overall time passage tracking
-unsigned long time_at_last_loop_start_;
-
 // A/V components
 Fencing_Point_Displays*  scoreboard_;
 Fencing_Clock*           clock_;
@@ -150,10 +146,10 @@ bool            remote_button_a_pressed_              = false;
 bool            remote_button_b_pressed_              = false;
 bool            remote_button_c_pressed_              = false;
 bool            remote_button_d_pressed_              = false;
-unsigned long   remote_button_a_pressed_time_         = false;
-unsigned long   remote_button_b_pressed_time_         = false;
-unsigned long   remote_button_c_pressed_time_         = false;
-unsigned long   remote_button_d_pressed_time_         = false;
+unsigned long   remote_button_a_time_of_depression_   = 0;
+unsigned long   remote_button_b_time_of_depression_   = 0;
+unsigned long   remote_button_c_time_of_depression_   = 0;
+unsigned long   remote_button_d_time_of_depression_   = 0;
 uint8_t         remote_button_a_last_tick_reacted_to_ = 0;
 uint8_t         remote_button_b_last_tick_reacted_to_ = 0;
 uint8_t         remote_button_c_last_tick_reacted_to_ = 0;
@@ -170,7 +166,7 @@ mode current_mode_ = mode::SABER;
 bool quiet_mode_enabled_ = false;
 
 // clock change timing
-unsigned long clock_adjustment_button_depressed_for_micros_ = 0;
+unsigned long clock_adjustment_button_time_of_depression_   = 0;
 int8_t        last_clock_adjustment_tick_reacted_to_        = -1; 
 uint8_t       most_recent_time_adjustment_level_            = 0;
 bool          did_time_reset_                               = false; 
@@ -182,13 +178,13 @@ unsigned long left_fencer_lame_prong_    = 0;
 unsigned long right_fencer_lame_prong_   = 0;
 
 // hit interpretation variables
-unsigned long left_fencer_contact_time_               = 0;
-unsigned long right_fencer_contact_time_              = 0;
+unsigned long left_fencer_contact_start_time_         = 0;
+unsigned long right_fencer_contact_start_time_        = 0;
 bool          locked_out_                             = false;
-unsigned long left_fencer_time_since_registered_hit_  = 0;
-unsigned long right_fencer_time_since_registered_hit_ = 0;
+unsigned long left_fencer_time_of_registered_hit_     = 0;
+unsigned long right_fencer_time_of_registered_hit_    = 0;
 bool          contact_reset_after_hit_signaled_       = true; //TODO switch on mode switch?
-unsigned long time_since_hit_signaled_                = 0;
+unsigned long time_of_lockout_                        = 0;
 bool          left_fencer_contact_made_               = false;
 bool          right_fencer_contact_made_              = false;
 bool          left_fencer_hit_on_target_              = false;
@@ -199,7 +195,7 @@ bool          right_fencer_hit_off_target_            = false;
 // Debugging variables
 unsigned long timing_event_start_micros_              = 0;
 unsigned long cycles_passed_                          = 0; 
-unsigned long total_summed_elapsed_micros_            = 0; 
+
 
 //================
 // Configuration
@@ -249,10 +245,6 @@ void setup()
   // why not just be sure?
   reset_values();
   lights_->reset_lights();
-
-  // initialize timing
-  time_at_last_loop_start_ = micros();
-
 }
 
 
@@ -265,17 +257,17 @@ void loop()
   while (true) // run forever
   {
     // get elapsed time
-    unsigned long elapsed_time = get_micros_elapsed_since_last_loop();
+    unsigned long current_time = micros(); 
 
     // update all major components on time elapsed
-    scoreboard_ ->tick(elapsed_time);   // TODO TODO NB this one line is like 0.69 milliseconds per cycle even after basic SSD redundancy check 
-    clock_      ->tick(elapsed_time);   // TODO TODO NB this one line is like 0.45 milliseconds per cycle even after basic SSD redundancy check 
-    buzzer_     ->tick(elapsed_time);   // TODO TODO NB this line doesn't do anything to the timing; makes sense as it's a no-op I think 
-    lights_     ->tick(elapsed_time);   // TODO TODO NB this line doesn't do anything to the timing; makes sense as it's a no-op I think 
+    scoreboard_ ->tick(current_time);   // TODO TODO NB this one line is like 0.69 milliseconds per cycle even after basic SSD redundancy check 
+    clock_      ->tick(current_time);   // TODO TODO NB this one line is like 0.45 milliseconds per cycle even after basic SSD redundancy check 
+    buzzer_     ->tick(current_time);   // TODO TODO NB this line doesn't do anything to the timing; makes sense as it's a no-op I think 
+    lights_     ->tick(current_time);   // TODO TODO NB this line doesn't do anything to the timing; makes sense as it's a no-op I think 
 
     // check user inputs and act on them
-    handle_remote_input(elapsed_time);
-    handle_clock_adjustment_buttons(elapsed_time);  // NB all the button methods so far are a total of 0.06 ms per cycle. Not huge! 
+    handle_remote_input(current_time);
+    handle_clock_adjustment_buttons(current_time);  // NB all the button methods so far are a total of 0.06 ms per cycle. Not huge! 
     handle_mode_switch_button();
     //handle_quiet_mode_button();
 
@@ -302,10 +294,10 @@ void loop()
     }
 
     // interpret equipment inputs (based on the current mode)
-    process_hits(elapsed_time);
+    process_hits(current_time);
 
     // react to equipment inputs as necessary
-    signal_hits(elapsed_time);
+    signal_hits(current_time);
 
     // main loop timing investigation
     if (DEBUG == 2)
@@ -325,18 +317,11 @@ void loop()
         Serial.print(millis_per_cycle);
         Serial.print("\tTotal Microseconds: ");
         Serial.print((curr_time - timing_event_start_micros_));
-        Serial.print("\tTotal Summed Microseconds: ");
-        Serial.print(total_summed_elapsed_micros_);
-        Serial.print("\tDifference: ");
-        Serial.print((float)(curr_time - timing_event_start_micros_) - (float)total_summed_elapsed_micros_);
         Serial.println("");
         cycles_passed_                = 0; 
         timing_event_start_micros_    = curr_time;
-        total_summed_elapsed_micros_  = 0; 
       }     
       cycles_passed_++; 
-      total_summed_elapsed_micros_  += elapsed_time; 
-
     }
   }
 }
@@ -344,10 +329,10 @@ void loop()
 
 //=================================================================================================================
 // process_hits - determines hit, lockout, and timeout statuses based on current equipment inputs and current mode
-//    parameter:  elapsed_time - the time in microseconds passed since the last processing
+//    parameter:  current_time - the time in microseconds passed since the last processing
 //    output:   none
 //================================================================================================================
-void process_hits(unsigned long elapsed_time)
+void process_hits(unsigned long current_time)
 {
   // first, check for hits!
 
@@ -355,88 +340,98 @@ void process_hits(unsigned long elapsed_time)
   if ((!locked_out_) && !(left_fencer_hit_on_target_ || left_fencer_hit_off_target_) )
   {
     // if the left fencer's registering a hit, then add that time to their tally (or start the tally if they weren't already hitting)
-    if ( (current_mode_ != mode::EPEE && is_reading_on_target(left_fencer_weapon_prong_, right_fencer_lame_prong_))   ||
-         (current_mode_ == mode::EPEE && is_reading_on_target(left_fencer_weapon_prong_, left_fencer_lame_prong_))    ||
-         (current_mode_ == mode::FOIL && is_reading_off_target(left_fencer_weapon_prong_, right_fencer_lame_prong_) )
+    if ( (current_mode_ != mode::EPEE && is_reading_on_target( left_fencer_weapon_prong_, right_fencer_lame_prong_))   ||
+         (current_mode_ == mode::EPEE && is_reading_on_target( left_fencer_weapon_prong_, left_fencer_lame_prong_ ))   ||
+         (current_mode_ == mode::FOIL && is_reading_off_target(left_fencer_weapon_prong_, right_fencer_lame_prong_))
        )
     {
       if (!left_fencer_contact_made_)
       {
+        // note the contact 
         left_fencer_contact_made_ = true;
-      }
-      else // the left fencer was already in contact
-      {
-        left_fencer_contact_time_ += elapsed_time;
+
+        // record when the contact started 
+        left_fencer_contact_start_time_ = current_time;
       }
     }
     else
     {
       // if there's no contact, then reset the counters
-      left_fencer_contact_made_ = false;
-      left_fencer_contact_time_ = 0;
+      left_fencer_contact_made_       = false;
+      left_fencer_contact_start_time_ = 0;
     }
 
-    // if the left fencer has enough contact time in their current tally (according to their weapon), mark a hit
+    // if the left fencer is in contact and has exceeded the necessary contact time, mark a hit
     // TODO NB: there's a weird situation where foil can start on-target and slide to off-target and the on-target depressed time counts. Is that right?
-    if ( ((current_mode_ == mode::SABER) && (left_fencer_contact_time_ > SABER_CONTACT_MICROS_) ) ||
-         ((current_mode_ == mode::FOIL)  && (left_fencer_contact_time_ > FOIL_CONTACT_MICROS_)  ) ||
-         ((current_mode_ == mode::EPEE)  && (left_fencer_contact_time_ > EPEE_CONTACT_MICROS_)  )
+    if ( left_fencer_contact_made_ &&
+         (
+          ((current_mode_ == mode::SABER) && ((unsigned long)(current_time - left_fencer_contact_start_time_) > SABER_CONTACT_MICROS_) ) ||
+          ((current_mode_ == mode::FOIL)  && ((unsigned long)(current_time - left_fencer_contact_start_time_) > FOIL_CONTACT_MICROS_ ) ) ||
+          ((current_mode_ == mode::EPEE)  && ((unsigned long)(current_time - left_fencer_contact_start_time_) > EPEE_CONTACT_MICROS_ ) )
+         )
        )
     {
       // if you're foil, you gotta check if you're off target
       if ((current_mode_ == mode::FOIL) && is_reading_off_target(left_fencer_weapon_prong_, right_fencer_lame_prong_))
       {
-        left_fencer_hit_off_target_ = true;
+        left_fencer_hit_off_target_          = true;
+        left_fencer_time_of_registered_hit_  = current_time;
       }
-      // every other weapon can only get here by being on-target, as off-targets don't exist
+      // every other weapon can only get here by being on-target, as off-targets don't exist TODO TODO still check on target as an error checking measure???
       else
       {
-        left_fencer_hit_on_target_ = true;
+        left_fencer_hit_on_target_           = true;
+        left_fencer_time_of_registered_hit_  = current_time;
       }
     }
   }
 
   // if the right fencer already has a hit, no need to confirm it again
-  if ((!locked_out_) && !(right_fencer_hit_on_target_ || right_fencer_hit_off_target_))
+  if ((!locked_out_) && !(right_fencer_hit_on_target_ || right_fencer_hit_off_target_) )
   {
     // if the right fencer's registering a hit, then add that time to their tally (or start the tally if they weren't already hitting)
-    if ( (current_mode_ != mode::EPEE && is_reading_on_target(right_fencer_weapon_prong_, left_fencer_lame_prong_))   ||
-         (current_mode_ == mode::EPEE && is_reading_on_target(right_fencer_weapon_prong_, right_fencer_lame_prong_))  ||
-         (current_mode_ == mode::FOIL && is_reading_off_target(right_fencer_weapon_prong_, left_fencer_lame_prong_) )
+    if ( (current_mode_ != mode::EPEE && is_reading_on_target( right_fencer_weapon_prong_, left_fencer_lame_prong_  ))  ||
+         (current_mode_ == mode::EPEE && is_reading_on_target( right_fencer_weapon_prong_, right_fencer_lame_prong_ ))  ||
+         (current_mode_ == mode::FOIL && is_reading_off_target(right_fencer_weapon_prong_, left_fencer_lame_prong_  ))
        )
     {
       if (!right_fencer_contact_made_)
       {
+        // note the contact 
         right_fencer_contact_made_ = true;
-      }
-      else // the right fencer was already in contact
-      {
-        right_fencer_contact_time_ += elapsed_time;
+
+        // record when the contact started 
+        right_fencer_contact_start_time_ = current_time;
       }
     }
     else
     {
       // if there's no contact, then reset the counters
-      right_fencer_contact_made_ = false;
-      right_fencer_contact_time_ = 0;
+      right_fencer_contact_made_       = false;
+      right_fencer_contact_start_time_ = 0;
     }
 
-    // if the right fencer has enough contact time in their current tally (according to their weapon), mark a hit if not locked out
+    // if the right fencer is in contact and has exceeded the necessary contact time, mark a hit
     // TODO NB: there's a weird situation where foil can start on-target and slide to off-target and the on-target depressed time counts. Is that right?
-    if ( ((current_mode_ == mode::SABER) && (right_fencer_contact_time_ > SABER_CONTACT_MICROS_) ) ||
-         ((current_mode_ == mode::FOIL)  && (right_fencer_contact_time_ > FOIL_CONTACT_MICROS_)  ) ||
-         ((current_mode_ == mode::EPEE)  && (right_fencer_contact_time_ > EPEE_CONTACT_MICROS_)  )
+    if ( right_fencer_contact_made_ &&
+          (
+           ((current_mode_ == mode::SABER) && ((unsigned long)(current_time - right_fencer_contact_start_time_) > SABER_CONTACT_MICROS_) ) ||
+           ((current_mode_ == mode::FOIL)  && ((unsigned long)(current_time - right_fencer_contact_start_time_) > FOIL_CONTACT_MICROS_ ) ) ||
+           ((current_mode_ == mode::EPEE)  && ((unsigned long)(current_time - right_fencer_contact_start_time_) > EPEE_CONTACT_MICROS_ ) )
+          )
        )
     {
-      // if you're foil, you gotta check if you're off target
+      // if you're foil, you gotta check if you're off target 
       if ((current_mode_ == mode::FOIL) && is_reading_off_target(right_fencer_weapon_prong_, left_fencer_lame_prong_))
       {
-        right_fencer_hit_off_target_ = true;
+        right_fencer_hit_off_target_         = true;
+        right_fencer_time_of_registered_hit_ = current_time;
       }
-      // every other weapon can only get here by being on-target, as off-targets don't exist
+      // every other weapon can only get here by being on-target, as off-targets don't exist TODO TODO still check on target as an error checking measure???
       else
       {
-        right_fencer_hit_on_target_ = true;
+        right_fencer_hit_on_target_          = true;
+        right_fencer_time_of_registered_hit_ = current_time;
       }
     }
   }
@@ -447,34 +442,30 @@ void process_hits(unsigned long elapsed_time)
   // if we're already locked out, no need to check for lockout again
   if (!locked_out_)
   {
-    // count the time since the hit became valid for each fencer
-    // TODO TODO TODO is this right, or do you count from initial contact??
-    if (left_fencer_hit_on_target_ || left_fencer_hit_off_target_)
-    {
-      left_fencer_time_since_registered_hit_  += elapsed_time;
-    }
-    if (right_fencer_hit_on_target_ || right_fencer_hit_off_target_)
-    {
-      right_fencer_time_since_registered_hit_ += elapsed_time;
-    }
-
-
-    // if the left fencer has a hit and enough time in their time-since-hit (TODO: or since initial contact?) to lock out (according to their weapon), lock out
-    if ( ((current_mode_ == mode::SABER) && (left_fencer_time_since_registered_hit_ > SABER_LOCKOUT_MICROS_) ) ||
-         ((current_mode_ == mode::FOIL)  && (left_fencer_time_since_registered_hit_ > FOIL_LOCKOUT_MICROS_)  ) ||
-         ((current_mode_ == mode::EPEE)  && (left_fencer_time_since_registered_hit_ > EPEE_LOCKOUT_MICROS_)  )
+    // if the left fencer has a valid hit and has had enough time pass since they confirmed it (according to their weapon), lock out
+    if ( ( left_fencer_hit_on_target_ || left_fencer_hit_off_target_ ) &&
+        (
+          ((current_mode_ == mode::SABER) && ((unsigned long)(current_time - left_fencer_time_of_registered_hit_) > SABER_LOCKOUT_MICROS_) ) ||
+          ((current_mode_ == mode::FOIL)  && ((unsigned long)(current_time - left_fencer_time_of_registered_hit_) > FOIL_LOCKOUT_MICROS_)  ) ||
+          ((current_mode_ == mode::EPEE)  && ((unsigned long)(current_time - left_fencer_time_of_registered_hit_) > EPEE_LOCKOUT_MICROS_)  )
+        )
        )
     {
-      locked_out_ = true;
+      locked_out_      = true;
+      time_of_lockout_ = current_time; 
     }
 
-    // if the right fencer has a hit and enough time in their time-since-hit (TODO: or since initial contact?) to lock out (according to their weapon), lock out
-    if ( ((current_mode_ == mode::SABER) && (right_fencer_time_since_registered_hit_ > SABER_LOCKOUT_MICROS_) ) ||
-         ((current_mode_ == mode::FOIL)  && (right_fencer_time_since_registered_hit_ > FOIL_LOCKOUT_MICROS_)  ) ||
-         ((current_mode_ == mode::EPEE)  && (right_fencer_time_since_registered_hit_ > EPEE_LOCKOUT_MICROS_)  )
+    // if the right fencer has a valid hit and has had enough time pass since they confirmed it (according to their weapon), lock out
+    if ( ( right_fencer_hit_on_target_ || right_fencer_hit_off_target_ ) &&
+        (
+          ((current_mode_ == mode::SABER) && ((unsigned long)(current_time - right_fencer_time_of_registered_hit_) > SABER_LOCKOUT_MICROS_) ) ||
+          ((current_mode_ == mode::FOIL)  && ((unsigned long)(current_time - right_fencer_time_of_registered_hit_) > FOIL_LOCKOUT_MICROS_)  ) ||
+          ((current_mode_ == mode::EPEE)  && ((unsigned long)(current_time - right_fencer_time_of_registered_hit_) > EPEE_LOCKOUT_MICROS_)  )
+        )
        )
     {
-      locked_out_ = true;
+      locked_out_      = true;
+      time_of_lockout_ = current_time; 
     }
   }
 }
@@ -536,17 +527,18 @@ bool is_reading_on_target(unsigned long fencer_A_weapon_prong, unsigned long fen
 //============================================================================================
 // signal_hits - sets A/V outputs and controls resetting between points. Will not reset until
 //         a zero-contact reading is made (no on OR off-target sensed contact)
-//    parameter:  elapsed_time - the time in microseconds passed since the last processing
+//    parameter:  current_time - the time in microseconds passed since the last processing
 //    output:   none
 //============================================================================================
-void signal_hits(unsigned long elapsed_time)
+void signal_hits(unsigned long current_time)
 {
-  // if there's not at least one contact-less reading, refuse to signal another hit (prevents continued shreiking on no change)
+  // if there's not at least one contact-less reading, refuse to signal another hit (prevents continued shrieking on no change)
   if (left_fencer_contact_made_ == false && right_fencer_contact_made_ == false)
   {
     contact_reset_after_hit_signaled_ = true;
   }
 
+  // TODO TODO encapsulate this in an "if (contact_reset_after_hit_signaled_)" too, to avoid the lights change???
   // if a fencer's gotten a hit, light up that light (hits can't get awarded if locked_out, so no need to check)
   if (left_fencer_hit_on_target_)   lights_->display_left_on_target();
   if (left_fencer_hit_off_target_)  lights_->display_left_off_target();
@@ -563,11 +555,11 @@ void signal_hits(unsigned long elapsed_time)
       // stop the clock
       clock_->stop();
       
-      // sound the buzzer to START signalling a hit
+      // sound the buzzer to START signaling a hit
       buzzer_->start_shrieking();
 
       // if buzzer delay has been achieved, quiet the buzzer
-      if (time_since_hit_signaled_ > BUZZER_DURATION_MICROS)
+      if ((unsigned long) (current_time - time_of_lockout_) > BUZZER_DURATION_MICROS)
       {
         // stop the buzzer
         buzzer_->stop_shrieking();
@@ -575,25 +567,22 @@ void signal_hits(unsigned long elapsed_time)
     }
 
     // if light delay has been achieved, reset the lights
-    if (time_since_hit_signaled_ > LIGHT_DURATION_MICROS)
+    if ((unsigned long) (current_time - time_of_lockout_) > LIGHT_DURATION_MICROS)
     {
       // reset the lights
       lights_->reset_lights();
     }
 
     // if both buzzer and light delays have been achieved...
-    if ( (time_since_hit_signaled_ > LIGHT_DURATION_MICROS) && (time_since_hit_signaled_ > BUZZER_DURATION_MICROS) )
+    if ( ((unsigned long) (current_time - time_of_lockout_) > LIGHT_DURATION_MICROS ) && 
+         ((unsigned long) (current_time - time_of_lockout_) > BUZZER_DURATION_MICROS) 
+       )
     {
       // reset from this hit
       reset_values();
 
       // commit to not buzzing another hit until we get at least one reading where no fencer is making contact
       contact_reset_after_hit_signaled_ = false;
-    }
-    else
-    {
-      // otherwise, just keep track of the passed time!
-      time_since_hit_signaled_ += elapsed_time;
     }
   }
 }
@@ -604,32 +593,26 @@ void signal_hits(unsigned long elapsed_time)
 //===============================================
 void reset_values()
 {
-  locked_out_               = false;
+  locked_out_                           = false;
 
-  // these should naturally get set to false when that's true, so don't shouldn't reset them here
-  //  left_fencer_contact_made_         = false;
-  //  right_fencer_contact_made_        = false;
-  //  left_fencer_contact_time_         = 0;
-  //  right_fencer_contact_time_        = 0;
+  right_fencer_hit_on_target_           = false;
+  right_fencer_hit_off_target_          = false;
+  left_fencer_hit_on_target_            = false;
+  left_fencer_hit_off_target_           = false;
 
-  right_fencer_hit_on_target_       = false;
-  right_fencer_hit_off_target_      = false;
-  left_fencer_hit_on_target_        = false;
-  left_fencer_hit_off_target_       = false;
+  left_fencer_time_of_registered_hit_   = 0;
+  right_fencer_time_of_registered_hit_  = 0;
 
-  left_fencer_time_since_registered_hit_  = 0;
-  right_fencer_time_since_registered_hit_ = 0;
-
-  time_since_hit_signaled_        = 0;
+  time_of_lockout_                      = 0;
 }
 
 
 //========================================================================================================
 // handle_clock_adjustment_buttons - implements clock change buttons and "hold longer go faster" feature
-//    parameter:  elapsed_time - the time in microseconds passed since the last processing
+//    parameter:  current_time - the time in microseconds passed since the last processing
 //    output:   none
 //========================================================================================================
-void handle_clock_adjustment_buttons(unsigned long elapsed_time)
+void handle_clock_adjustment_buttons(unsigned long current_time)
 {
   bool clock_time_increment_button_just_pressed = false;
   bool clock_time_decrement_button_just_pressed = false;
@@ -681,7 +664,7 @@ void handle_clock_adjustment_buttons(unsigned long elapsed_time)
   // If either adjustment was just pressed, reset the relevant counting variables 
   if (clock_time_increment_button_just_pressed || clock_time_decrement_button_just_pressed)
   {
-    clock_adjustment_button_depressed_for_micros_ =  0;
+    clock_adjustment_button_time_of_depression_   =  current_time;
     last_clock_adjustment_tick_reacted_to_        = -1;  
     most_recent_time_adjustment_level_            =  0; 
 
@@ -700,7 +683,7 @@ void handle_clock_adjustment_buttons(unsigned long elapsed_time)
   else if ((clock_time_increment_button_pressed_ || clock_time_decrement_button_pressed_) && !did_time_reset_)
   {
     // lazy implicit math.floor() by using integer (technically long) math
-    int8_t current_tick = clock_adjustment_button_depressed_for_micros_ / CLOCK_ADJUSTMENT_RATE_TICK_MICROS;
+    int8_t current_tick = (unsigned long) (current_time - clock_adjustment_button_time_of_depression_) / CLOCK_ADJUSTMENT_RATE_TICK_MICROS;
 
     // only fire an time adjustment once per tick
     if (current_tick > last_clock_adjustment_tick_reacted_to_)
@@ -709,7 +692,7 @@ void handle_clock_adjustment_buttons(unsigned long elapsed_time)
       last_clock_adjustment_tick_reacted_to_ = current_tick;
 
       // figure out what size the increment/decrement of our clock time's gonna be
-      uint8_t level = clock_adjustment_button_depressed_for_micros_ / CLOCK_ADJUSTMENT_RATE_CHANGE_MICROS;
+      uint8_t level = (unsigned long) (current_time - clock_adjustment_button_time_of_depression_) / CLOCK_ADJUSTMENT_RATE_CHANGE_MICROS;
       uint8_t max_clock_adjustment_level_index = sizeof(CLOCK_ADJUSTMENT_LEVEL_MICROS_) / sizeof(CLOCK_ADJUSTMENT_LEVEL_MICROS_[0]);
       if (level > max_clock_adjustment_level_index) // don't let it max out
       {
@@ -747,9 +730,6 @@ void handle_clock_adjustment_buttons(unsigned long elapsed_time)
       // actually send the adjustment to the clock
       clock_->set_time(new_time);
     }
-
-    // keep track of how long an adjustment button is being held
-    clock_adjustment_button_depressed_for_micros_ += elapsed_time;
   }
   // neither was pressed 
   else if (!clock_time_increment_button_pressed_ && !clock_time_decrement_button_pressed_) 
@@ -775,39 +755,41 @@ void handle_clock_adjustment_buttons(unsigned long elapsed_time)
 //                Button D:
 //                Mode One: Toggle the quiet mode
 //                Mode Two: Reset the score to 0-0
-//    parameter:  elapsed_time - the time in microseconds passed since the last processing
+//    parameter:  current_time - the time in microseconds passed since the last processing
 //    output:   none
 //===============================================================================================================================
-void handle_remote_input(unsigned long elapsed_time)
+void handle_remote_input(unsigned long current_time)
 {
-  // for future debugs 
-  //Serial.print("elapsed_time:"); Serial.print(digitalRead(elapsed_time)); Serial.print(", ");
+  // for a future debug level TODO 
+  //Serial.print("current_time:"); Serial.print(digitalRead(current_time)); Serial.print(", ");
   //Serial.print("REMOTE_INPUT_BUTTON_A_PIN_:"); Serial.print(digitalRead(REMOTE_INPUT_BUTTON_A_PIN_)); Serial.print(", ");
   //Serial.print("REMOTE_INPUT_BUTTON_B_PIN_:"); Serial.print(digitalRead(REMOTE_INPUT_BUTTON_B_PIN_)); Serial.print(", ");
   //Serial.print("REMOTE_INPUT_BUTTON_C_PIN_:"); Serial.print(digitalRead(REMOTE_INPUT_BUTTON_C_PIN_)); Serial.print(", ");
   //Serial.print("REMOTE_INPUT_BUTTON_D_PIN_:"); Serial.print(digitalRead(REMOTE_INPUT_BUTTON_D_PIN_)); Serial.print(", ");
   //Serial.println();
 
+  uint8_t current_tick = 0; 
   
   // handle remote button a
+  
   if (digitalRead(REMOTE_INPUT_BUTTON_A_PIN_) == HIGH) // if the button is reading as pressed
   {
-    if (remote_button_a_pressed_) // if the button was already pressed
+    if (remote_button_a_pressed_ == false) // meaning it was JUST pressed 
     {
-      // tally the pressed time
-      remote_button_a_pressed_time_ += elapsed_time;
-
-      // if the pressed time has completed a new hold duration, fire the button's second mode
-      if (remote_button_a_last_tick_reacted_to_ < (remote_button_a_pressed_time_ / REMOTE_BUTTON_MODE_2_HOLD_DURATION_) ) // cheeky math.floor thanks to int math
-      {
-        // save the new tick value so you don't react to it twice
-        remote_button_a_last_tick_reacted_to_ = remote_button_a_pressed_time_ / REMOTE_BUTTON_MODE_2_HOLD_DURATION_;
-        // fire the button's second mode
-        buzzer_     ->chirp();
-        scoreboard_ ->decrement_left_fencer_score();  // current decided alt action: left fencer -1
-      }
+      remote_button_a_time_of_depression_ = current_time; 
     }
     remote_button_a_pressed_ = true;
+
+    // if the pressed time has completed a new hold duration, fire the button's second mode
+    current_tick = (unsigned long)(current_time - remote_button_a_time_of_depression_) / REMOTE_BUTTON_MODE_2_HOLD_DURATION_; 
+    if (remote_button_a_last_tick_reacted_to_ < current_tick) // cheeky math.floor thanks to int math
+    {
+      // save the new tick value so you don't react to it twice
+      remote_button_a_last_tick_reacted_to_ = current_tick;
+      // fire the button's second mode
+      buzzer_     ->chirp();
+      scoreboard_ ->decrement_left_fencer_score();  // current decided alt action: left fencer -1
+    } 
   }
   else
   {
@@ -820,29 +802,31 @@ void handle_remote_input(unsigned long elapsed_time)
 
     // reset the button variables
     remote_button_a_pressed_              = false;
-    remote_button_a_pressed_time_         = 0;
+    remote_button_a_time_of_depression_   = 0;
     remote_button_a_last_tick_reacted_to_ = 0;
   }
 
+
   // handle remote button b
+  
   if (digitalRead(REMOTE_INPUT_BUTTON_B_PIN_) == HIGH) // if the button is reading as pressed
   {
-    if (remote_button_b_pressed_) // if the button was already pressed
+    if (remote_button_b_pressed_ == false) // meaning it was JUST pressed 
     {
-      // tally the pressed time
-      remote_button_b_pressed_time_ += elapsed_time;
-
-      // if the pressed time has completed a new hold duration, fire the button's second mode
-      if (remote_button_b_last_tick_reacted_to_ < (remote_button_b_pressed_time_ / REMOTE_BUTTON_MODE_2_HOLD_DURATION_) ) // cheeky math.floor thanks to int math
-      {
-        // save the new tick value so you don't react to it twice
-        remote_button_b_last_tick_reacted_to_ = remote_button_b_pressed_time_ / REMOTE_BUTTON_MODE_2_HOLD_DURATION_;
-        // fire the button's second mode
-        buzzer_     ->chirp();
-        scoreboard_ ->decrement_right_fencer_score(); // current decided alt action: right fencer -1
-      }
+      remote_button_b_time_of_depression_ = current_time; 
     }
     remote_button_b_pressed_ = true;
+
+    // if the pressed time has completed a new hold duration, fire the button's second mode
+    current_tick = (unsigned long)(current_time - remote_button_b_time_of_depression_) / REMOTE_BUTTON_MODE_2_HOLD_DURATION_; 
+    if (remote_button_b_last_tick_reacted_to_ < current_tick) // cheeky math.floor thanks to int math
+    {
+      // save the new tick value so you don't react to it twice
+      remote_button_b_last_tick_reacted_to_ = current_tick;
+      // fire the button's second mode
+      buzzer_     ->chirp();
+      scoreboard_ ->decrement_right_fencer_score(); // current decided alt action: right fencer -1
+    } 
   }
   else
   {
@@ -855,29 +839,31 @@ void handle_remote_input(unsigned long elapsed_time)
 
     // reset the button variables
     remote_button_b_pressed_              = false;
-    remote_button_b_pressed_time_         = 0;
+    remote_button_b_time_of_depression_   = 0;
     remote_button_b_last_tick_reacted_to_ = 0;
   }
 
+
   // handle remote button c
+  
   if (digitalRead(REMOTE_INPUT_BUTTON_C_PIN_) == HIGH) // if the button is reading as pressed
   {
-    if (remote_button_c_pressed_) // if the button was already pressed
+    if (remote_button_c_pressed_ == false) // meaning it was JUST pressed 
     {
-      // tally the pressed time
-      remote_button_c_pressed_time_ += elapsed_time;
-
-      // if the pressed time has completed a new hold duration, fire the button's second mode
-      if (remote_button_c_last_tick_reacted_to_ < (remote_button_c_pressed_time_ / REMOTE_BUTTON_MODE_2_HOLD_DURATION_) ) // cheeky math.floor thanks to int math
-      {
-        // save the new tick value so you don't react to it twice
-        remote_button_c_last_tick_reacted_to_ = remote_button_c_pressed_time_ / REMOTE_BUTTON_MODE_2_HOLD_DURATION_;
-        // fire the button's second mode
-        buzzer_ ->chirp();
-        clock_  ->set_time(CLOCK_STANDARD_START_MICROS_);  // current decided alt action: reset the clock
-      }
+      remote_button_c_time_of_depression_ = current_time; 
     }
     remote_button_c_pressed_ = true;
+
+    // if the pressed time has completed a new hold duration, fire the button's second mode
+    current_tick = (unsigned long)(current_time - remote_button_c_time_of_depression_) / REMOTE_BUTTON_MODE_2_HOLD_DURATION_; 
+    if (remote_button_c_last_tick_reacted_to_ < current_tick) // cheeky math.floor thanks to int math
+    {
+      // save the new tick value so you don't react to it twice
+      remote_button_c_last_tick_reacted_to_ = current_tick;
+      // fire the button's second mode
+      buzzer_ ->chirp();
+      clock_  ->set_time(CLOCK_STANDARD_START_MICROS_);  // current decided alt action: reset the clock
+    } 
   }
   else
   {
@@ -890,29 +876,31 @@ void handle_remote_input(unsigned long elapsed_time)
 
     // reset the button variables
     remote_button_c_pressed_              = false;
-    remote_button_c_pressed_time_         = 0;
+    remote_button_c_time_of_depression_   = 0;
     remote_button_c_last_tick_reacted_to_ = 0;
   }
 
+
   // handle remote button d
+  
   if (digitalRead(REMOTE_INPUT_BUTTON_D_PIN_) == HIGH) // if the button is reading as pressed
   {
-    if (remote_button_d_pressed_) // if the button was already pressed
+    if (remote_button_d_pressed_ == false) // meaning it was JUST pressed 
     {
-      // tally the pressed time
-      remote_button_d_pressed_time_ += elapsed_time;
-
-      // if the pressed time has completed a new hold duration, fire the button's second mode
-      if (remote_button_d_last_tick_reacted_to_ < (remote_button_d_pressed_time_ / REMOTE_BUTTON_MODE_2_HOLD_DURATION_) ) // cheeky math.floor thanks to int math
-      {
-        // save the new tick value so you don't react to it twice
-        remote_button_d_last_tick_reacted_to_ = remote_button_d_pressed_time_ / REMOTE_BUTTON_MODE_2_HOLD_DURATION_;
-        // fire the button's second mode
-        buzzer_     ->chirp();
-        scoreboard_ ->set_scores(0, 0); // current decided alt action: reset the scores
-      }
+      remote_button_d_time_of_depression_ = current_time; 
     }
     remote_button_d_pressed_ = true;
+
+    // if the pressed time has completed a new hold duration, fire the button's second mode
+    current_tick = (unsigned long)(current_time - remote_button_d_time_of_depression_) / REMOTE_BUTTON_MODE_2_HOLD_DURATION_; 
+    if (remote_button_d_last_tick_reacted_to_ < current_tick) // cheeky math.floor thanks to int math
+    {
+      // save the new tick value so you don't react to it twice
+      remote_button_d_last_tick_reacted_to_ = current_tick;
+      // fire the button's second mode
+      buzzer_     ->chirp();
+      scoreboard_ ->set_scores(0, 0); // current decided alt action: reset the scores
+    } 
   }
   else
   {
@@ -931,10 +919,9 @@ void handle_remote_input(unsigned long elapsed_time)
 
     // reset the button variables
     remote_button_d_pressed_              = false;
-    remote_button_d_pressed_time_         = 0;
+    remote_button_d_time_of_depression_   = 0;
     remote_button_d_last_tick_reacted_to_ = 0;
   }
-
 }
 
 
@@ -983,6 +970,9 @@ void handle_mode_switch_button()
         clock_      ->clock_                     ->set_display_contents("FOIL", false, true, DISPLAY_MODE_CHANGE_TEXT_LENGTH_ );
         scoreboard_ -> left_fencer_score_display_->set_display_contents("FOIL", false, true, DISPLAY_MODE_CHANGE_TEXT_LENGTH_ );
         scoreboard_ ->right_fencer_score_display_->set_display_contents("FOIL", false, true, DISPLAY_MODE_CHANGE_TEXT_LENGTH_ );
+
+        // commit to not buzzing another hit until we get at least one reading where no fencer is making contact
+        /////contact_reset_after_hit_signaled_ = false; // TODO TODO commented out rn because it makes bugtesting easier! also check if this is right! (like, make it include lights too?) 
         break;
       case mode::FOIL:
         current_mode_ = mode::EPEE;
@@ -1046,24 +1036,4 @@ void handle_quiet_mode_button()
     // chirp to let the user know they pressed it right! (if you're chirping!)
     buzzer_->chirp();
   }
-}
-
-
-//==================================================================================================================
-// get_micros_elapsed_since_last_loop - helper function to calculate time passage, called once per loop!
-//    output:   the time in microseconds since this was last called, roughly 4 microsec resolution on the Nano
-//==================================================================================================================
-unsigned long get_micros_elapsed_since_last_loop()
-{
-  // get the new time
-  unsigned long current_time = micros();
-
-  // apparently this will always get around the overflow issue and return the actual number of micros elapsed,
-  // as long as the answer's not greater than the overall time to overflow (~70 min on the nano)
-  unsigned long elapsed_time = (unsigned long) (current_time - time_at_last_loop_start_);
-
-  // update the old time marker
-  time_at_last_loop_start_ = current_time;
-
-  return elapsed_time;
 }

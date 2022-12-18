@@ -2,8 +2,8 @@
 //  Desc    : C++ Interface for two displays showing the points scored by     //   
 //            each fencer                                                     //
 //  Dev     : Nate Cope,                                                      //
-//  Version : 1.0                                                             //
-//  Date    : Nov 2022                                                        //
+//  Version : 1.1                                                             //
+//  Date    : Dec 2022                                                        //
 //  Notes   : - All display updating should be done via tick(0)               //
 //            to centralize message processing in one spot                    // 
 //============================================================================//
@@ -40,18 +40,22 @@ Fencing_Point_Displays::~Fencing_Point_Displays()
 }
 
 
-// Lets the object know how much time has passed. For the sake of streamlining 
+// Lets the object know what the current time is. For the sake of streamlining 
 // the main code, this class should never check the time or call any sort of delay function,
-// but rely on this method to tell it how much time has passed, and update that way. 
-void Fencing_Point_Displays::tick(int elapsed_micros)
+// but rely on this method to tell it what the time is, and update that way. 
+// if "0" is passed in specifically, we're just updating the displays, and no time checks are done 
+void Fencing_Point_Displays::tick(unsigned long current_time_micros)
 {
+  // TODO TODO TODO redundancy check here would be p easy I think too
+
+  
   String score_string = ""; 
 
   // set and pad a string for proper display / to easily do string conversion 
   score_string += this->left_fencer_score_;
   while (score_string.length() < Seven_Segment_Display::DISPLAY_SIZE_) score_string = " " + score_string;
   
-  // set the contents (abuse automatic string concatenation promotion behavior) 
+  // set the contents (abuse automatic string concatenation promotion behavior) TODOTODO reduadancy check
   this-> left_fencer_score_display_->set_display_contents(score_string); 
 
   // set and pad a string for proper display / to easily do string conversion 
@@ -64,8 +68,8 @@ void Fencing_Point_Displays::tick(int elapsed_micros)
   
   // tell the underlying SSDs how much time has passed so it will update
   // it's also important for overriding messages and stuff 
-  this-> left_fencer_score_display_->tick(elapsed_micros);
-  this->right_fencer_score_display_->tick(elapsed_micros);
+  this-> left_fencer_score_display_->tick(current_time_micros);
+  this->right_fencer_score_display_->tick(current_time_micros);
 }
 
 

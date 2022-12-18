@@ -1,8 +1,8 @@
 //============================================================================//
 //  Desc    : C++ Interface for a Buzzer                                      //
 //  Dev     : Nate Cope,                                                      //
-//  Version : 1.0                                                             //
-//  Date    : Oct 2022                                                        //
+//  Version : 1.1                                                             //
+//  Date    : Dec 2022                                                        //
 //  Notes   :                                                                 //
 //                                                                            // 
 //============================================================================//
@@ -23,10 +23,11 @@ class Buzzer
     //    uint8_t control_pin - the Arduino pin control terminal of the buzzer  
     Buzzer(uint8_t control_pin);
 
-    // Lets the object know how much time has passed. For the sake of streamlining 
+    // Lets the object know what the current time is. For the sake of streamlining 
     // the main code, this class should never check the time or call any sort of delay function,
-    // but rely on this method to tell it how much time has passed, and update that way. 
-    void tick(int elapsed_micros); 
+    // but rely on this method to tell it what the time is, and update that way. 
+    // if "0" is passed in specifically, we're just updating, and no time checks are done 
+    void tick(unsigned long current_time_micros); 
 
     // Emit a little "blip" to let the user know they've pressed a button correctly 
     void chirp();

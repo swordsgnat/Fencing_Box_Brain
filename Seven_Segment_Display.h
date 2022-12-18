@@ -1,8 +1,8 @@
 //============================================================================//
 //  Desc    : C++ Interface for a four-character, seven-segment display       //
 //  Dev     : Nate Cope,                                                      //
-//  Version : 1.0                                                             //
-//  Date    : Nov 2022                                                        //
+//  Version : 1.1                                                             //
+//  Date    : Dec 2022                                                        //
 //  Notes   :                                                                 //
 //                                                                            // 
 //============================================================================//
@@ -31,9 +31,10 @@ class Seven_Segment_Display
     // Destructor
     ~Seven_Segment_Display();
 
-    // Lets the object know how much time has passed. For the sake of streamlining 
+    // Lets the object know what the current time is. For the sake of streamlining 
     // the main code, this class should never check the time or call any sort of delay function,
-    // but rely on this method to tell it how much time has passed, and update that way. 
+    // but rely on this method to tell it what the time is, and update that way. 
+    // if "0" is passed in specifically, we're just updating the display, and no time checks are done 
     void tick(unsigned long elapsed_micros); 
     
     // Sets what is shown on the display, and some details about how it is shown. 
@@ -78,11 +79,11 @@ class Seven_Segment_Display
     // storage for content of the "screen", priority message edition 
     uint8_t override_display_contents_[DISPLAY_SIZE_]   = {0x00,0x00,0x00,0x00};
 
-    // how long current priority message has been displayed for 
-    unsigned long override_age_in_micros    = 0; 
+    // when the current priority message was first displayed
+    unsigned long override_birth_time_      = 0; 
 
-    // how long the current priority message should be displayed for in total  
-    unsigned long override_lifespan_micros  = 0; 
+    // how long the current priority message should be displayed for in total  TODO delte?
+    unsigned long override_lifespan_micros_ = 0; 
 
     // helper method to zero out display storage
     void clear_display_contents(); 
@@ -101,6 +102,9 @@ class Seven_Segment_Display
 
     // helper method, simplifies some calls and does redundancy checking 
     void send_to_display(uint8_t contents_to_display[]);
+
+    // track the time we're told about to make stopping and starting simpler
+    unsigned long most_recently_seen_external_time_ = 0; 
 };
 
 #endif 
