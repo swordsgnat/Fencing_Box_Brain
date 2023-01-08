@@ -1,19 +1,15 @@
-//===========================================================================//
-//                                                                           //
-//  Desc:    Arduino Code to Implement a Fencing Scoring Machine             //
-//  Dev:     Wnew (base), Nate Cope (updates)                                //
-//  Date:    Nov  2012 (base)                                                //
-//  Updated: Sept 2015 (base),Sept-Dec 2022 (updates)                        //
-//  Version: 2.1                                                             //
-//  Notes:   1. Basis of algorithm from digitalwestie on github. Thanks Mate //
-//           2. Used uint8_t instead of unsigned long where possible to      //
-//              optimise                                                     //
-//                                                                           //
-//  To do:   1. Could use shift reg on lights and mode LEDs to save pins     //
-//           2. Implement Short Circuit LEDs (already provision for it)      //
-//           3. Set up debug levels correctly                                //
-//                                                                           //
-//===========================================================================//
+//============================================================================//
+//  Name    : Fencing_Box_Brain.ino                                           //
+//  Desc    : Arduino Code to Implement a Fencing Scoring Machine             //
+//  Dev     : Wnew (base), Nate Cope (updates)                                //
+//  Date    : Nov  2012 (base)                                                //
+//  Updated : Sept 2015 (base), Sept 2022 - Jan 2023 (updates)                //
+//  Version : 2.1                                                             //
+//  Notes   : 1. [inherited] Basis of algorithm from digitalwestie on github. // 
+//                           Thanks Mate                                      //
+//            2. [inherited] Used uint8_t instead of unsigned long where      //
+//                           possible to optimise                             //
+//============================================================================//
 
 // TODO short circuit lights
 // TODO check every TODO in the other files
@@ -24,6 +20,8 @@
 // TODO labelle checks, someday
 // TODO explain the fucken var_ vs. var thing
 // TODO why are the off / on target args unsigned longs??
+// TODO "Name:" entry in each heading paragraph thing 
+// TODO probably supposed to have the GNU general liscence in this file up top or something 
 
 //============
 // #defines
@@ -195,6 +193,11 @@ bool          right_fencer_hit_off_target_            = false;
 // Debugging variables
 unsigned long timing_event_start_micros_              = 0;
 unsigned long cycles_passed_                          = 0; 
+unsigned long last_cycle_start_                       = 0; 
+unsigned long worst_cycle_time_                       = 0;   
+unsigned long second_worst_cycle_time_                = 0;   
+unsigned long third_worst_cycle_time_                 = 0;   
+           
 
 
 //================
@@ -258,9 +261,9 @@ void loop()
   {
     // get elapsed time
     unsigned long current_time = micros(); 
-
+ 
     // update all major components on time elapsed
-    scoreboard_ ->tick(current_time);   // TODO TODO NB this one line is like 0.69 milliseconds per cycle even after basic SSD redundancy check 
+    scoreboard_ ->tick(current_time);   // this line is now like 0.03 milliseconds per cycle (if the score hasn't changed)
     clock_      ->tick(current_time);   // TODO TODO NB this one line is like 0.45 milliseconds per cycle even after basic SSD redundancy check 
     buzzer_     ->tick(current_time);   // TODO TODO NB this line doesn't do anything to the timing; makes sense as it's a no-op I think 
     lights_     ->tick(current_time);   // TODO TODO NB this line doesn't do anything to the timing; makes sense as it's a no-op I think 
@@ -271,7 +274,7 @@ void loop()
     handle_mode_switch_button();
     //handle_quiet_mode_button();
 
-    // get equipment inputs
+    // get equipment inputs // these take like 450 microseconds all together!! digitalReads are way faster, can I do that instead??
     left_fencer_weapon_prong_  = analogRead(LEFT_FENCER_WEAPON_PIN_);
     right_fencer_weapon_prong_ = analogRead(RIGHT_FENCER_WEAPON_PIN_);
     left_fencer_lame_prong_    = analogRead(LEFT_FENCER_LAME_PIN_);
@@ -293,34 +296,70 @@ void loop()
       Serial.println(right_fencer_lame_prong_);
     }
 
-    // interpret equipment inputs (based on the current mode)
+    // interpret equipment inputs (based on the current mode)// basically free, timewise [before hit registered)
     process_hits(current_time);
 
-    // react to equipment inputs as necessary
+    // react to equipment inputs as necessary // basically free, timewise [before hit registered)
     signal_hits(current_time);
 
-    // main loop timing investigation
+
+    // main loop timing investigation / bugtesting 
     if (DEBUG == 2)
-    {
+    { 
+      // do the average cycle counts 
       if (cycles_passed_ == 0)
       {
-        timing_event_start_micros_ = micros();
+        timing_event_start_micros_ = current_time;
         Serial.println("Timing...");
       }
       else if (cycles_passed_ == CYCLES_PER_TIMING_EVENT_)
       {
-        unsigned long curr_time = micros();
-        float millis_per_cycle    = ((float)curr_time - (float)timing_event_start_micros_) / ((float)CYCLES_PER_TIMING_EVENT_ * 1000); // microsecs per millisec, being lazy 
+        float millis_per_cycle    = ((float)current_time - (float)timing_event_start_micros_) / ((float)CYCLES_PER_TIMING_EVENT_ * 1000); // microsecs per millisec, being lazy 
         Serial.print("Milliseconds Per Cycle Average For Last ");
         Serial.print(CYCLES_PER_TIMING_EVENT_);
         Serial.print(" Cycles: ");
         Serial.print(millis_per_cycle);
         Serial.print("\tTotal Microseconds: ");
-        Serial.print((curr_time - timing_event_start_micros_));
+        Serial.print((current_time - timing_event_start_micros_));
+        Serial.print("\tWorst Cycle: ");
+        Serial.print(worst_cycle_time_);
+        Serial.print("\tSecond Worst Cycle: ");
+        Serial.print(second_worst_cycle_time_);
+        Serial.print("\tThird Worst Cycle: ");
+        Serial.print(third_worst_cycle_time_);
         Serial.println("");
+   
+        // zero the tracking variables 
         cycles_passed_                = 0; 
-        timing_event_start_micros_    = curr_time;
+        timing_event_start_micros_    = micros(); // to try to eliminate the effects of these printouts 
+        worst_cycle_time_             = 0; 
+        second_worst_cycle_time_      = 0;
+        third_worst_cycle_time_       = 0;
       }     
+
+      // keep track of the worst cycle you've seen 
+      unsigned long last_cycle_time = (current_time - last_cycle_start_);
+      if (last_cycle_time > third_worst_cycle_time_) // it was worse than the third
+      {
+        if (last_cycle_time > second_worst_cycle_time_) // it was worse than the second and third 
+        {
+          if (last_cycle_time > worst_cycle_time_) // it was worse than the previous worst!
+          {
+            worst_cycle_time_ = last_cycle_time; 
+          }
+          else
+          {
+            second_worst_cycle_time_ = last_cycle_time; 
+          }
+        }
+        else // it was worse than the third, but not the second or the first 
+        {
+          third_worst_cycle_time_ = last_cycle_time; 
+        }
+      }
+      last_cycle_start_ = current_time; 
+
+      // keep track of your overall progress 
       cycles_passed_++; 
     }
   }

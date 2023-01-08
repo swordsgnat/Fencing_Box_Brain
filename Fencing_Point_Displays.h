@@ -2,10 +2,9 @@
 //  Desc    : C++ Interface for two displays showing the points scored by     //
 //            each fencer.                                                    //
 //  Dev     : Nate Cope,                                                      //
-//  Version : 1.1                                                            //
-//  Date    : Dec 2022                                                        //
+//  Version : 1.2                                                             //
+//  Date    : Jan 2023                                                        //
 //  Notes   :                                                                 //
-//                                                                            // 
 //============================================================================//
 
 #ifndef FENCING_POINT_DISPLAYS_H
@@ -33,6 +32,7 @@ class Fencing_Point_Displays
     // the main code, this class should never check the time or call any sort of delay function,
     // but rely on this method to tell it what the time is, and update that way. 
     // if "0" is passed in specifically, we're just updating the displays, and no time checks are done 
+    // (this one's just a pass-through, effectively) 
     void tick(unsigned long current_time_micros); 
 
     // Hopefully all self-explanatory 
@@ -54,8 +54,18 @@ class Fencing_Point_Displays
  
   private:
 
-   int  left_fencer_score_; 
-   int right_fencer_score_; 
+    // tracking the current score (initialize at 0)
+    int  left_fencer_score_         =   0; 
+    int right_fencer_score_         =   0; 
+
+    // tracking the previous scores to avoid redundant actions 
+    //    (start at -1 to force first update)
+    int  previous_left_fencer_score_ = -1; 
+    int previous_right_fencer_score_ = -1; 
+
+  // helper method to pad out score strings and update the underlying SSDs as to the new message to display
+  // only if the scores have actually changed. 
+    void handle_score_change(); 
 };
 
 #endif 
