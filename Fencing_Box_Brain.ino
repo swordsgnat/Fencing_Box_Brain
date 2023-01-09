@@ -22,6 +22,7 @@
 // TODO why are the off / on target args unsigned longs??
 // TODO "Name:" entry in each heading paragraph thing 
 // TODO probably supposed to have the GNU general liscence in this file up top or something 
+// TODO changing point values should stop the clock? maybe?
 
 //============
 // #defines
@@ -263,18 +264,18 @@ void loop()
     unsigned long current_time = micros(); 
  
     // update all major components on time elapsed
-    scoreboard_ ->tick(current_time);   // this line is now like 0.03 milliseconds per cycle (if the score hasn't changed)
-    clock_      ->tick(current_time);   // TODO TODO NB this one line is like 0.45 milliseconds per cycle even after basic SSD redundancy check 
-    buzzer_     ->tick(current_time);   // TODO TODO NB this line doesn't do anything to the timing; makes sense as it's a no-op I think 
-    lights_     ->tick(current_time);   // TODO TODO NB this line doesn't do anything to the timing; makes sense as it's a no-op I think 
+    scoreboard_ ->tick(current_time);   // Timing NB: this line is now like 0.03 milliseconds per average cycle (without timer or lights on)
+    clock_      ->tick(current_time);   // Timing NB: this line is now like 0.60 milliseconds per average cycle (without timer or lights on)
+    buzzer_     ->tick(current_time);   // Timing NB: this line doesn't do anything; makes sense as it's a no-op 
+    lights_     ->tick(current_time);   // Timing NB: this line doesn't do anything; makes sense as it's a no-op 
 
     // check user inputs and act on them
     handle_remote_input(current_time);
-    handle_clock_adjustment_buttons(current_time);  // NB all the button methods so far are a total of 0.06 ms per cycle. Not huge! 
+    handle_clock_adjustment_buttons(current_time);  // Timing NB: all the button methods so far are a total of 0.06 ms per cycle. Not huge! 
     handle_mode_switch_button();
     //handle_quiet_mode_button();
 
-    // get equipment inputs // these take like 450 microseconds all together!! digitalReads are way faster, can I do that instead??
+    // get equipment inputs // TODO TODO Timing NB: these take like 450 microseconds all together!! digitalReads are way faster, can I do that instead??
     left_fencer_weapon_prong_  = analogRead(LEFT_FENCER_WEAPON_PIN_);
     right_fencer_weapon_prong_ = analogRead(RIGHT_FENCER_WEAPON_PIN_);
     left_fencer_lame_prong_    = analogRead(LEFT_FENCER_LAME_PIN_);

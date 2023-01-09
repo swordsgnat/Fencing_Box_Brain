@@ -1,8 +1,9 @@
 //============================================================================//
-//  Desc    : C++ Implementation for a four-character, seven-segment display  //
+//  Name    : Fencing_Clock.cpp                                               //
+//  Desc    : C++ Implementation for a timeer to track a fencing match        //
 //  Dev     : Nate Cope,                                                      //
-//  Version : 1.1                                                             //
-//  Date    : Nov 2022                                                        //
+//  Version : 1.2                                                             //
+//  Date    : Jan 2023                                                        //
 //  Notes   : - All display updating should be done via tick(0)               //
 //            to centralize message processing in one spot                    // 
 //============================================================================//
@@ -35,33 +36,36 @@ Fencing_Clock::~Fencing_Clock()
 // if "0" is passed in specifically, we're just updating the display, and no time checks are done 
 void Fencing_Clock::tick(unsigned long current_time_micros)
 {
-  // default to what we currently have BEFORE updating the time 
-  unsigned long remaining_micros = this->get_remaining_micros(); 
 
   // if we're not just updating...
   if (current_time_micros != 0) 
   {
     // track the new timestamp
     this->most_recently_seen_external_time_ = current_time_micros; 
-
-    // and if the timer is ticking...
-    if (this->is_running_)
-    {
-      // update our understanding of the time based on the new timestamp 
-      remaining_micros = this->get_remaining_micros(); 
-      
-      // if we're out of time, automatically stop running and finish zeroing the time 
-      if (remaining_micros == 0) 
-      {
-        this->stop(); // handles the time setting itself 
-      } 
-    }
   } 
-  
-  // TODO TODO TODO immediately reject anything with the same time as before?
-  
-  // do the actual displaying TODO TODO TODO should this even be outside the running loop? it only needs to happen in setup elsewise???
-  this->clock_->set_display_contents(this->get_time_string_from_micros(remaining_micros), true); 
+
+  // either way, we're gonna need the remaining time 
+  unsigned long remaining_micros = this->get_remaining_micros(); 
+
+  // if we're running but out of time, we should stop running
+  if (remaining_micros == 0 && this->is_running_)
+  {
+      this->stop(); // handles the time setting itself 
+  }
+
+  // use int math abuse to see how many whole seconds are left on the clock 
+  unsigned long remaining_whole_seconds = remaining_micros / this->MICROS_IN_SEC_; 
+
+  // redundancy check - don't bother figuring out what to display for the time 
+  //  if the number of whole seconds hasn't changed 
+  if (this->last_sent_number_of_whole_seconds_ != remaining_whole_seconds)
+  {  
+    // do the actual displaying 
+    this->clock_->set_display_contents(this->get_time_string_from_micros(remaining_micros), true); 
+
+    // update our understanding of the last time sent 
+    this->last_sent_number_of_whole_seconds_ = remaining_whole_seconds; 
+  }
   
   // tell the underlying SSDs how much time has passed so it will update
   // it's also important for overriding messages and stuff 
@@ -83,11 +87,6 @@ void Fencing_Clock::start()
 // Set the clock to be paused 
 void Fencing_Clock::stop()
 {
-
-  // TODO TODO TODO deal withe the triple dependancy here it's horrible 
-  ////  this->set_time(this->get_remaining_micros());
-
-  
   if (this->is_running_) // we only need to worry if we're already running 
   {
     // do the last calculation before stopping the time 
@@ -175,7 +174,9 @@ void Fencing_Clock::set_time(unsigned long new_micros)
 // helper method; make conversion from unformatted microseconds to human-readable time string easy  
 String Fencing_Clock::get_time_string_from_micros(unsigned long microsecs)
 {
-  String return_string    = ""; 
+  // start off with a blank string the size of our display
+  String return_string = "    "; // TODO kind of a magic number; should really use Seven_Segment_Display::DISPLAY_SIZE_ I guess
+                                 //      this is just the fastest way I've found so far 
 
   // check your inputs so you don't overflow the timer  
   if (microsecs > this->MAX_MICROS_) microsecs = this->MAX_MICROS_;
@@ -184,37 +185,26 @@ String Fencing_Clock::get_time_string_from_micros(unsigned long microsecs)
   uint8_t tens_of_minutes = microsecs / (this->MICROS_IN_SEC_ * this->SECS_IN_MIN_ * 10); 
   if (tens_of_minutes != 0) 
   {
-    return_string        += tens_of_minutes;  
+    return_string.setCharAt(0, '0' + tens_of_minutes);  // [0] is the first digit in the time string and therefore the tens-of-minutes place 
   }
-  else
-  {
-    return_string        += " ";
-  }
-    
+  
   // modulo gets the remainder (micros minus all the ten minutes) which we can then further convert (and int math drops off decimals)
   uint8_t minutes         = (microsecs % (this->MICROS_IN_SEC_ * this->SECS_IN_MIN_ * 10)) / (this->MICROS_IN_SEC_ * this->SECS_IN_MIN_); 
-  if (minutes == 0 && return_string == " ") // one blank, for if the minutes tens place was zero 
+  if (!(minutes == 0 && tens_of_minutes == 0)) // if they're both zero, you want to leave it blank (no digits so far)
   {
-    return_string        += " ";  
-  }
-  else
-  {
-    return_string        += minutes;      
+    return_string.setCharAt(1, '0' + minutes);  // [1] is the second digit in the time string and therefore the minutes place 
   }
 
   // modulo gets the remainder (micros minus all the minutes) which we can then further convert (and int math drops off decimals)
   uint8_t tens_of_seconds = (microsecs % (this->MICROS_IN_SEC_ * this->SECS_IN_MIN_)) / (this->MICROS_IN_SEC_ * 10); 
-  if (tens_of_seconds == 0 && return_string == "  ") // two blanks, for if both minute numbers were 0 
+  if (!(tens_of_seconds == 0 && minutes == 0 && tens_of_minutes == 0)) // if they're all zero, you want to leave it blank (no digits so far)
   {
-    return_string        += " "; 
-  }
-  else
-  {
-    return_string        += tens_of_seconds;  
+    return_string.setCharAt(2, '0' + tens_of_seconds);  // [2] is the third digit in the time string and therefore the tens-of-seconds place 
   }
 
   // modulo gets the remainder (micros minus all the ten-second-chunks) which we can then further convert (and int math drops off decimals)
-  return_string          += (microsecs % (this->MICROS_IN_SEC_ * 10)) / (this->MICROS_IN_SEC_); 
+  // [3] is the fourth digit in the time string and therefore the seconds place 
+  return_string.setCharAt(3, '0' + ((microsecs % (this->MICROS_IN_SEC_ * 10)) / (this->MICROS_IN_SEC_)) ); 
 
   // send it back
   return return_string;

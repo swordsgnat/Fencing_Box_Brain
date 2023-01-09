@@ -114,31 +114,71 @@ int  Fencing_Point_Displays::get_right_fencer_score()
 // only if the scores have actually changed. 
 void Fencing_Point_Displays::handle_score_change()
 {
-  String score_string; 
+  // start off with a blank string the size of our display
+  String score_string = "    "; // TODO kind of a magic number; should really use Seven_Segment_Display::DISPLAY_SIZE_ I guess
+                                //      this is just the fastest way I've found so far 
 
+  uint8_t thousands, hundreds, tens, ones; 
+  
   // don't wanna work if we don't have to 
   if (this->left_fencer_score_ != this->previous_left_fencer_score_)
   {
     // update the previously seen score 
     this->previous_left_fencer_score_ = this->left_fencer_score_; 
 
-    // set and pad a string for proper display / to easily do string conversion 
-    score_string = this->left_fencer_score_;
-    while (score_string.length() < Seven_Segment_Display::DISPLAY_SIZE_) score_string = " " + score_string;
+    thousands = this->left_fencer_score_ / 1000;          // abusing int math truncation here 
+    if(thousands != 0)                                    // don't print if you're gonna be a leading zero 
+    {
+      score_string.setCharAt(0, '0' + thousands);         // [0] on our score string is the thousands place; abusing "'0' +" to get the right char val 
+    }
+
+    hundreds = (this->left_fencer_score_ % 1000) / 100;   // abusing int math truncation here 
+    if(!(hundreds == 0 && thousands == 0))                // don't print if you're gonna be a leading zero 
+    {
+      score_string.setCharAt(1, '0' + hundreds);          // [1] on our score string is the hundreds place; abusing "'0' +" to get the right char val 
+    }
+
+    tens = (this->left_fencer_score_ % 100) / 10;         // abusing int math truncation here 
+    if(!(tens == 0 && hundreds == 0 && thousands == 0))   // don't print if you're gonna be a leading zero 
+    {
+      score_string.setCharAt(2, '0' + tens);              // [2] on our score string is the tens place; abusing "'0' +" to get the right char val 
+    }
+
+    ones = (this->left_fencer_score_ % 10);               // abusing int math truncation here 
+    score_string.setCharAt(3, '0' + ones);                // [3] on our score string is the ones place; abusing "'0' +" to get the right char val 
     
     // set the contents 
     this->left_fencer_score_display_->set_display_contents(score_string); 
   }
 
   // rinse and repeat for the right fencer 
+  score_string = "    ";
   if (this->right_fencer_score_ != this->previous_right_fencer_score_)
   {
     // update the previously seen score 
     this->previous_right_fencer_score_ = this->right_fencer_score_; 
 
-    // set and pad a string for proper display / to easily do string conversion 
-    score_string = this->right_fencer_score_;
-    while (score_string.length() < Seven_Segment_Display::DISPLAY_SIZE_) score_string = " " + score_string;
+    thousands = this->right_fencer_score_ / 1000;         // abusing int math truncation here 
+    if(thousands != 0)                                    // don't print if you're gonna be a leading zero 
+    {
+      score_string.setCharAt(0, '0' + thousands);         // [0] on our score string is the thousands place; abusing "'0' +" to get the right char val 
+    }
+
+    hundreds = (this->right_fencer_score_ % 1000) / 100;  // abusing int math truncation here 
+    if(!(hundreds == 0 && thousands == 0))                // don't print if you're gonna be a leading zero 
+    {
+      score_string.setCharAt(1, '0' + hundreds);          // [1] on our score string is the hundreds place; abusing "'0' +" to get the right char val 
+    }
+
+    tens = (this->right_fencer_score_ % 100) / 10;        // abusing int math truncation here 
+    if(!(tens == 0 && hundreds == 0 && thousands == 0))   // don't print if you're gonna be a leading zero 
+    {
+      score_string.setCharAt(2, '0' + tens);              // [2] on our score string is the tens place; abusing "'0' +" to get the right char val 
+    }
+
+    ones = (this->right_fencer_score_ % 10);              // abusing int math truncation here 
+    score_string.setCharAt(3, '0' + ones);                // [3] on our score string is the ones place; abusing "'0' +" to get the right char val 
+
     
     // set the contents 
     this->right_fencer_score_display_->set_display_contents(score_string); 
