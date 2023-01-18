@@ -1,8 +1,9 @@
 //===========================================================================//
+//  Name    : Fencing_Light.cpp                                              //
 //  Desc    : C++ Implementation for a RBG Ring Fencing Light                //
 //  Dev     : Nate Cope,                                                     //
-//  Date    : Dec 2022                                                       //
-//  Version : 1.1                                                            //
+//  Date    : Jan 2023                                                       //
+//  Version : 1.2                                                            //
 //  Notes   : TODO a show-off on time running out, too??                     //
 //            TODO cool animation methods and resulting tick method          // 
 //===========================================================================//
@@ -11,6 +12,13 @@
 #include "Fencing_Light.h"
 
 // TODO TODO TODO redundancy color checks! 
+// TODO short circuit light implementation logic is gonna need work 
+//      to keep it essentially independant from what the other lights 
+//      are doing
+// TODO eventually probably a by-pixel redundancy check instead of by state??
+// TODO light I think eventually needs to take over its own timing; 
+//      accept a duration to display whatever light method gets called...
+// TODO short circuit lights are a new color
 
 // Constructor 
 //    uint8_t control_pin - the Arduino pin control terminal of the fencing light  
@@ -54,35 +62,53 @@ void Fencing_Light::tick(unsigned long current_time_micros)
 // Illuminate green to show an on-target hit! 
 void Fencing_Light::light_up_green()
 {
-  set_all_leds_to_color(this->color::GREEN); 
+  if (this->current_display_state != this->display_state::ALL_GREEN)  // redundancy check 
+  {
+    set_all_leds_to_color(this->color::GREEN); 
+    this->current_display_state != this->display_state::ALL_GREEN; 
+  }
 }
 
 
 // Illuminate red to show an on-target hit! 
 void Fencing_Light::light_up_red()
 {
-  set_all_leds_to_color(this->color::RED); 
+  if (this->current_display_state != this->display_state::ALL_RED)  // redundancy check 
+  {
+    set_all_leds_to_color(this->color::RED); 
+    this->current_display_state = this->display_state::ALL_RED;
+  }
 }
 
 
 // Illuminate green to show an off-target hit! 
 void Fencing_Light::light_up_white()
 {
-  set_all_leds_to_color(this->color::WHITE);
+  if (this->current_display_state != this->display_state::ALL_WHITE)   // redundancy check 
+  {
+    set_all_leds_to_color(this->color::WHITE);
+    this->current_display_state = this->display_state::ALL_WHITE; 
+  }
 }
 
 
-// Show the "touching own lame" signal  
+// Show the "touching own lame" signal  // TODO make them a new color so they're always visible 
 void Fencing_Light::light_up_short_circuit_light()
 {
-  //  set some ARBITRARY pattern (currently a square of 1, 5, 9, 13) to white
-  this->led_ring_->setPixelColor( 1,  this->get_color_code(this->color::WHITE) );      
-  this->led_ring_->setPixelColor( 5,  this->get_color_code(this->color::WHITE) );   
-  this->led_ring_->setPixelColor( 9,  this->get_color_code(this->color::WHITE) );      
-  this->led_ring_->setPixelColor( 13, this->get_color_code(this->color::WHITE) );     
+  // redundancy check 
+  if (!this->short_circuit_signal_on)
+  {
+    //  set some ARBITRARY pattern (currently a square of 1, 5, 9, 13) to white
+    this->led_ring_->setPixelColor( 1,  this->get_color_code(this->color::WHITE) );      
+    this->led_ring_->setPixelColor( 5,  this->get_color_code(this->color::WHITE) );   
+    this->led_ring_->setPixelColor( 9,  this->get_color_code(this->color::WHITE) );      
+    this->led_ring_->setPixelColor( 13, this->get_color_code(this->color::WHITE) );     
+    
+    //  Update ring to match set colors TODO TODO redundancy check 
+    this->led_ring_->show();  
   
-  //  Update ring to match set colors TODO TODO redundancy check 
-  this->led_ring_->show();  
+    this->short_circuit_signal_on = true; 
+  }
 }
 
 // control how bright the signals are! max 255, min 0 
@@ -103,7 +129,12 @@ void Fencing_Light::set_brightness(uint8_t brightness)
 // stop showing any lights 
 void Fencing_Light::go_dark()
 {
-  set_all_leds_to_color(this->color::NONE);           
+  if (this->current_display_state != this->display_state::DARK)   // redundancy check 
+  {
+    set_all_leds_to_color(this->color::NONE); 
+    this->current_display_state   = this->display_state::DARK;
+    this->short_circuit_signal_on = false;  // TODO this is gonna need work; short circuit needs to be kinda independent...
+  }          
 }
 
 
@@ -128,9 +159,6 @@ void Fencing_Light::show_off_on_labelle()
 //  to the provided color (provided as an enum)
 void Fencing_Light::set_all_leds_to_color(color color_enum_val)
 {
-
-  // TODO TODO TODO redundancy check... 
-  
   // For each pixel in strip...
   for (int i = 0; i < this->led_ring_->numPixels(); i++) 
   { 
@@ -139,8 +167,7 @@ void Fencing_Light::set_all_leds_to_color(color color_enum_val)
   }
 
   //  Update ring to match set colors 
-  this->led_ring_->show();  
-                         
+  this->led_ring_->show();                    
 }
 
 

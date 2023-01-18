@@ -1,9 +1,11 @@
 //===========================================================================//
+//  Name    : Fencing_Light.h                                                //
 //  Desc    : C++ Interface for a RBG Ring Fencing Light                     //
 //  Dev     : Nate Cope,                                                     //
-//  Date    : Dec 2022                                                       //
-//  Version : 1.1                                                            //
-//  Notes   :                                                                //
+//  Date    : Jan 2023                                                       //
+//  Version : 1.2                                                            //
+//  Notes   : TODO a show-off on time running out, too??                     //
+//            TODO cool animation methods and resulting tick method          // 
 //===========================================================================//
 
 #ifndef FENCING_LIGHT_H
@@ -77,6 +79,7 @@ class Fencing_Light
     // min brightness value constant; set by underlying library 
     const uint8_t MIN_BRIGHTNESS_ = 0; 
 
+    // readable reference!
     enum color
     {
       RED,
@@ -84,6 +87,17 @@ class Fencing_Light
       WHITE,
       NONE
     };
+
+    // readable references relating to redundancy reduction
+    enum display_state
+    {
+      ALL_RED,
+      ALL_GREEN,
+      ALL_WHITE,
+      DARK
+    };
+    display_state current_display_state   = display_state::DARK; 
+    bool          short_circuit_signal_on = false; 
 
 
     //

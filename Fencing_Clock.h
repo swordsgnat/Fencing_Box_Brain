@@ -1,5 +1,5 @@
 //============================================================================//
-//  Name    : Fencing_Clock.h                                               //
+//  Name    : Fencing_Clock.h                                                 //
 //  Desc    : C++ Interface for a timeer to track a fencing match             //
 //  Dev     : Nate Cope,                                                      //
 //  Version : 1.2                                                             //

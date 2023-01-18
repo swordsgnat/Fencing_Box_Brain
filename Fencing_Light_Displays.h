@@ -1,5 +1,6 @@
 //===========================================================================//
-//  Desc    : C++ Interface for two RGB rings indicating fencing hits         //
+//  Name    : Fencing_Light_Displays.h                                       //
+//  Desc    : C++ Interface for two RGB rings indicating fencing hits        //
 //  Dev     : Nate Cope,                                                     //
 //  Date    : Dec 2022                                                       //
 //  Version : 1.1                                                            //

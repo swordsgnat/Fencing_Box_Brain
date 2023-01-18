@@ -9,20 +9,26 @@
 //                           Thanks Mate                                      //
 //            2. [inherited] Used uint8_t instead of unsigned long where      //
 //                           possible to optimise                             //
+//            3. variables with a trailing underscore are global; (var_)      //
+//               variables without are local! (var)                           //
+//            4. NB: Neopixel's show() and Arduinos tone() do NOT play well   //
+//               together; show() cuts off all interrupts for a bit, which    //
+//               affects all timing including tone() and micros()             //
 //============================================================================//
 
 // TODO short circuit lights
 // TODO check every TODO in the other files
 // TODO components mostly set their own pin states?
-// TODO changing mode during running clock???
+// TODO changing mode during running clock??? 
+// TODO reset the lights on a change of mode? 
 // TODO THIS code implements not singaling hits if there's no time on the clock
 // TODO loop()'s order has to be figured out...
 // TODO labelle checks, someday
-// TODO explain the fucken var_ vs. var thing
 // TODO why are the off / on target args unsigned longs??
 // TODO "Name:" entry in each heading paragraph thing 
 // TODO probably supposed to have the GNU general liscence in this file up top or something 
 // TODO changing point values should stop the clock? maybe?
+// TODO what does show() do to timing when one fencer gets a point and the other isn't yet locked out?
 
 //============
 // #defines
@@ -84,12 +90,11 @@ enum mode
   //SABER_CONTINUITY,
   //FOIL_CONTINUITY,
   //EPEE_CONTINUITY
-  // if you add modes later, you gotta go change the mode wraparound in the handle_mode_switch_button() method
+  // NB: if you add modes later, you gotta go change the mode wraparound in the handle_mode_switch_button() method
 };
 
 // Timing Constants
 const unsigned long MICROS_IN_SEC                       = 1000000;                // conversion constant; "avoiding magic numbers"
-const unsigned long BUZZER_DURATION_MICROS              = 1 * MICROS_IN_SEC;      // length of time the buzzer is kept on after a hit (microseconds)
 const unsigned long LIGHT_DURATION_MICROS               = 3 * MICROS_IN_SEC;      // length of time the lights are kept on after a hit ((microseconds)
 const unsigned long BAUDRATE                            = 57600;//9600;                  // baudrate of the serial debug interface
 const unsigned long CLOCK_ADJUSTMENT_RATE_TICK_MICROS   = 0.333 * MICROS_IN_SEC;  // how fast the time increments / decrements when the corresponding button is held down
@@ -220,8 +225,7 @@ void setup()
   pinMode(RIGHT_FENCER_WEAPON_PIN_,             INPUT);
   pinMode(RIGHT_FENCER_LAME_PIN_,               INPUT);
 
-  // set all the output pins to be outputs
-  pinMode(BUZZER_CONTROL_PIN_,                  OUTPUT);
+  // set all the output pins to be outputs // TODO they're mostly gonna do stuff like this themselves in the objects 
   pinMode(LEFT_FENCER_SCORE_DISPLAY_CLK_PIN_,   OUTPUT);
   pinMode(LEFT_FENCER_SCORE_DISPLAY_DATA_PIN_,  OUTPUT);
   pinMode(RIGHT_FENCER_SCORE_DISPLAY_CLK_PIN_,  OUTPUT);
@@ -579,7 +583,9 @@ void signal_hits(unsigned long current_time)
   }
 
   // TODO TODO encapsulate this in an "if (contact_reset_after_hit_signaled_)" too, to avoid the lights change???
-  // if a fencer's gotten a hit, light up that light (hits can't get awarded if locked_out, so no need to check)
+  // if a fencer's gotten a hit, light up that light (hits can't get awarded if locked_out, so no need to check once there)
+  // TNB: these get called over and over and over, but Fencing_Lights does redundancy checks anyway
+  // TODO maybe in the future detect and handle new_hit when it happens, instead of separating process_hits and signal hits??
   if (left_fencer_hit_on_target_)   lights_->display_left_on_target();
   if (left_fencer_hit_off_target_)  lights_->display_left_off_target();
   if (right_fencer_hit_on_target_)  lights_->display_right_on_target();
@@ -589,40 +595,28 @@ void signal_hits(unsigned long current_time)
   if (locked_out_)
   {
     // only sound the buzzer if this isn't a constant-hitting situation
-    if (contact_reset_after_hit_signaled_)
+    if (contact_reset_after_hit_signaled_) 
     {
+      // commit to not buzzing another hit until we get at least one reading where no fencer is making contact
+      // NB: also avoids this block getting called over and over and over 
+      contact_reset_after_hit_signaled_ = false;
 
-      // stop the clock
+      // stop the clock TODO I suspect this is costly, even when only called once? 
       clock_->stop();
       
-      // sound the buzzer to START signaling a hit
-      buzzer_->start_shrieking();
-
-      // if buzzer delay has been achieved, quiet the buzzer
-      if ((unsigned long) (current_time - time_of_lockout_) > BUZZER_DURATION_MICROS)
-      {
-        // stop the buzzer
-        buzzer_->stop_shrieking();
-      }
+      // sound the buzzer 
+      buzzer_->buzz();
     }
 
-    // if light delay has been achieved, reset the lights
+    // if light delay has been achieved, reset the lights 
+    // NB: we assume here that the light duration will be longer than the buzzer duration 
     if ((unsigned long) (current_time - time_of_lockout_) > LIGHT_DURATION_MICROS)
     {
       // reset the lights
       lights_->reset_lights();
-    }
 
-    // if both buzzer and light delays have been achieved...
-    if ( ((unsigned long) (current_time - time_of_lockout_) > LIGHT_DURATION_MICROS ) && 
-         ((unsigned long) (current_time - time_of_lockout_) > BUZZER_DURATION_MICROS) 
-       )
-    {
       // reset from this hit
       reset_values();
-
-      // commit to not buzzing another hit until we get at least one reading where no fencer is making contact
-      contact_reset_after_hit_signaled_ = false;
     }
   }
 }
