@@ -67,13 +67,21 @@ const uint8_t LEFT_FENCER_LAME_PIN_                 = A4;    // Analog (Epee ret
 const uint8_t RIGHT_FENCER_WEAPON_PIN_              = A5;    // Analog
 const uint8_t RIGHT_FENCER_LAME_PIN_                = A6;   // Analog (Epee return path)
 
+
 // Output Pins
-const uint8_t LEFT_FENCER_SCORE_DISPLAY_CLK_PIN_    = 12;  // pin for communication with left fencer scoreboard
-const uint8_t LEFT_FENCER_SCORE_DISPLAY_DATA_PIN_   = 11; // pin for communication with left fencer scoreboard
-const uint8_t RIGHT_FENCER_SCORE_DISPLAY_CLK_PIN_   = LEFT_FENCER_SCORE_DISPLAY_CLK_PIN_;  // it's not a problem if they share!
-const uint8_t RIGHT_FENCER_SCORE_DISPLAY_DATA_PIN_  = 10; // pin for communication with right fencer scoreboard
-const uint8_t TIME_DISPLAY_CLK_PIN_                 = LEFT_FENCER_SCORE_DISPLAY_CLK_PIN_;  // it's not a problem if they share!
-const uint8_t TIME_DISPLAY_DATA_PIN_                = 9; // pin for communication with timer
+//    NB: For the seven-segment displays, the clock pin broadly tells the display WHEN to receive data, and the 
+//        data pin broadly tells the display WHAT the data is. We've developed an incremental way to update them
+//        in order to optimize for speed, where little bits of new messages are sent every loop instead of a full 
+//        update. Under this tactic, it's totally fine if displays share their data pins (since they won't be 
+//        told via their clock pin to pick up that data if its not meant for them) but it DOES NOT WORK if 
+//        displays share their clock pins (since they have no way of knowing what data is meant for them if 
+//        they're all getting the same timing signals 
+const uint8_t LEFT_FENCER_SCORE_DISPLAY_CLK_PIN_    = 12;  // pin for signaling input to the left fencer scoreboard
+const uint8_t LEFT_FENCER_SCORE_DISPLAY_DATA_PIN_   = 11;  // pin for delivering data to the left fencer scoreboard  
+const uint8_t RIGHT_FENCER_SCORE_DISPLAY_CLK_PIN_   = 10;  // pin for signaling input to the right fencer scoreboard
+const uint8_t RIGHT_FENCER_SCORE_DISPLAY_DATA_PIN_  = LEFT_FENCER_SCORE_DISPLAY_DATA_PIN_; // pin for delivering data to the right fencer scoreboard 
+const uint8_t TIME_DISPLAY_CLK_PIN_                 = 9;  // it's not a problem if they share! LOL WRONG
+const uint8_t TIME_DISPLAY_DATA_PIN_                = LEFT_FENCER_SCORE_DISPLAY_DATA_PIN_; // pin for communication with timer
 const uint8_t LEFT_FENCER_RING_LIGHT_CONTROL_PIN_   = 13; // pin for communication with left fencer scoring light
 const uint8_t RIGHT_FENCER_RING_LIGHT_CONTROL_PIN_  = 8; // pin for communication with right fencer scoring light
 const uint8_t BUZZER_CONTROL_PIN_                   = 6;  // pin for sending commands to buzzer module
@@ -105,7 +113,7 @@ const unsigned long CLOCK_ADJUSTMENT_LEVEL_MICROS_ []   = { 1  * MICROS_IN_SEC,
                                                             60 * MICROS_IN_SEC
                                                           };
 const unsigned long CLOCK_STANDARD_START_MICROS_        = 3 * 60 * MICROS_IN_SEC; // the time put on the clock when it's reset
-const unsigned long REMOTE_BUTTON_MODE_2_HOLD_DURATION_ = 2 * MICROS_IN_SEC;      // the time a remote button must be held down to activate its second mode
+const unsigned long REMOTE_BUTTON_MODE_2_HOLD_DURATION_ = 1 * MICROS_IN_SEC;      // the time a remote button must be held down to activate its second mode
 const unsigned long DISPLAY_MODE_CHANGE_TEXT_LENGTH_    = 1 * MICROS_IN_SEC;      // the duration to display the name of the new mode
 
 // Lockout & Depress Times
@@ -226,12 +234,6 @@ void setup()
   pinMode(RIGHT_FENCER_LAME_PIN_,               INPUT);
 
   // set all the output pins to be outputs // TODO they're mostly gonna do stuff like this themselves in the objects 
-  pinMode(LEFT_FENCER_SCORE_DISPLAY_CLK_PIN_,   OUTPUT);
-  pinMode(LEFT_FENCER_SCORE_DISPLAY_DATA_PIN_,  OUTPUT);
-  pinMode(RIGHT_FENCER_SCORE_DISPLAY_CLK_PIN_,  OUTPUT);
-  pinMode(RIGHT_FENCER_SCORE_DISPLAY_DATA_PIN_, OUTPUT);
-  pinMode(TIME_DISPLAY_CLK_PIN_,                OUTPUT);
-  pinMode(TIME_DISPLAY_DATA_PIN_ ,              OUTPUT);
   pinMode(LEFT_FENCER_RING_LIGHT_CONTROL_PIN_,  OUTPUT);
   pinMode(RIGHT_FENCER_RING_LIGHT_CONTROL_PIN_, OUTPUT);
 
@@ -269,10 +271,10 @@ void loop()
  
     // update all major components on time elapsed
     scoreboard_ ->tick(current_time);   // Timing NB: this line is now like 0.03 milliseconds per average cycle (without timer or lights on)
-    clock_      ->tick(current_time);   // Timing NB: this line is now like 0.60 milliseconds per average cycle (without timer or lights on)
+    clock_      ->tick(current_time);   // Timing NB: this line is now like 0.06 milliseconds per average cycle (without timer or lights on)
     buzzer_     ->tick(current_time);   // Timing NB: this line doesn't do anything; makes sense as it's a no-op 
     lights_     ->tick(current_time);   // Timing NB: this line doesn't do anything; makes sense as it's a no-op 
-
+  
     // check user inputs and act on them
     handle_remote_input(current_time);
     handle_clock_adjustment_buttons(current_time);  // Timing NB: all the button methods so far are a total of 0.06 ms per cycle. Not huge! 
