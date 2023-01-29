@@ -6,6 +6,7 @@
 //  Version : 1.2                                                            //
 //  Notes   : TODO a show-off on time running out, too??                     //
 //            TODO cool animation methods and resulting tick method          // 
+//            Requires NeoPixel Library to be installed                      //
 //===========================================================================//
 
 #ifndef FENCING_LIGHT_H
@@ -16,7 +17,7 @@
 #include <Arduino.h>
 
 // local includes
-#include "Adafruit_NeoPixel.h"
+#include <Adafruit_NeoPixel.h>
 
 // A class to control a ring light for a fencing scoring machine 
 class Fencing_Light

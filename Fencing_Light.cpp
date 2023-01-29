@@ -26,6 +26,9 @@ Fencing_Light::Fencing_Light(uint8_t control_pin)
 {
   // set the control pin 
   this->CONTROL_PIN_ = control_pin;
+  
+  // make sure the control pin's in the right mode 
+  pinMode(this->CONTROL_PIN_, OUTPUT);  
 
   // define the NeoPixel object, that last arg is some library thing we don't have to care about 
   this->led_ring_ = new Adafruit_NeoPixel(this->LED_COUNT_, this->CONTROL_PIN_, NEO_GRB + NEO_KHZ800);
@@ -65,7 +68,7 @@ void Fencing_Light::light_up_green()
   if (this->current_display_state != this->display_state::ALL_GREEN)  // redundancy check 
   {
     set_all_leds_to_color(this->color::GREEN); 
-    this->current_display_state != this->display_state::ALL_GREEN; 
+    this->current_display_state = this->display_state::ALL_GREEN; 
   }
 }
 
@@ -174,6 +177,7 @@ void Fencing_Light::set_all_leds_to_color(color color_enum_val)
 // helper method to make code clean, just converts a color enum value 
 //  into an actual underying-class color value (some uint32_t) that 
 //  it can understand  
+// TODO should it be max brightness or scale based on what the brightness setting currently is?
 uint32_t Fencing_Light::get_color_code(color color_enum_val)
 {
     uint32_t return_val = 0; 

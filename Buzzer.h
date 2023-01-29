@@ -66,7 +66,7 @@ class Buzzer
 
     // constants for noticable auditory hit-registered confirmation 
     const static unsigned long DEFAULT_BUZZ_DURATION_   = 1500 * MICROS_IN_MILLI_;  // micros
-    const int BUZZ_NOTE_                                = NOTES::NOTE_D7; 
+    const int BUZZ_NOTE_                                = NOTES::NOTE_C8; //NOTES::NOTE_D7; 
 
 
 
