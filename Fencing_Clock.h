@@ -1,10 +1,10 @@
 //============================================================================//
-//  Desc    : C++ Interface for a Fencing Timer                               //
+//  Name    : Fencing_Clock.h                                                 //
+//  Desc    : C++ Interface for a timeer to track a fencing match             //
 //  Dev     : Nate Cope,                                                      //
-//  Version : 1.1                                                             //
-//  Date    : Dec 2022                                                        //
+//  Version : 1.2                                                             //
+//  Date    : Jan 2023                                                        //
 //  Notes   :                                                                 //
-//                                                                            // 
 //============================================================================//
 
 #ifndef FENCING_CLOCK_H
@@ -74,10 +74,13 @@ class Fencing_Clock
     String get_time_string_from_micros(unsigned long microsecs);
 
     // track the time since we started to do time math better 
-    unsigned long time_of_most_recent_start_        = 0; 
+    unsigned long time_of_most_recent_start_         = 0; 
 
     // track the time we're told about to make stopping and starting simpler
-    unsigned long most_recently_seen_external_time_ = 0; 
+    unsigned long most_recently_seen_external_time_  = 0; 
+
+    // redundancy check so we're not packing new strings for the same result over and over 
+    unsigned long last_sent_number_of_whole_seconds_ = 0; 
 };
 
 #endif 

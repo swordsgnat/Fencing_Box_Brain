@@ -1,4 +1,5 @@
 //===========================================================================//
+//  Name    : Fencing_Light_Displays.cpp                                     //
 //  Desc    : C++ Implementation for a RBG Ring Fencing Light Set            //
 //  Dev     : Nate Cope,                                                     //
 //  Date    : Dec 2022                                                       //
@@ -35,7 +36,7 @@ Fencing_Light_Displays::~Fencing_Light_Displays()
 // if "0" is passed in specifically, we're just updating the displays, and no time checks are done 
 void Fencing_Light_Displays::tick(unsigned long current_time_micros)
 {
-  // currently no-op
+  // currently no-op (beyond passing on the tick)
   this->left_fencer_light_ ->tick(current_time_micros);
   this->right_fencer_light_->tick(current_time_micros);
 }

@@ -1,10 +1,10 @@
 //============================================================================//
+//  Name    : Buzzer.h                                                        //
 //  Desc    : C++ Interface for a Buzzer                                      //
 //  Dev     : Nate Cope,                                                      //
-//  Version : 1.1                                                             //
-//  Date    : Dec 2022                                                        //
+//  Version : 1.2                                                             //
+//  Date    : Jan 2023                                                        //
 //  Notes   :                                                                 //
-//                                                                            // 
 //============================================================================//
 
 #ifndef BUZZER_H
@@ -30,13 +30,15 @@ class Buzzer
     void tick(unsigned long current_time_micros); 
 
     // Emit a little "blip" to let the user know they've pressed a button correctly 
-    void chirp();
+    // Takes in a duration in microseconds (to keep consistent with other timing code) 
+    void chirp(unsigned long chirp_duration_micros = DEFAULT_CHIRP_DURATION_);
 
-    // Start emitting a loud, noticable tone to let the fencers know a touch has been scored 
-    void start_shrieking();
+    // Emit a loud, noticable tone to let the fencers know a touch has been scored 
+    // Takes in a duration in microseconds (to keep consistent with other timing code) 
+    void buzz(unsigned long buzz_duration_micros = DEFAULT_BUZZ_DURATION_);
 
-    // Stop emitting the "scored" tone
-    void stop_shrieking();
+    // Stop emitting sound 
+    void silence();
 
     // play a cute little sequence to greet the world 
     void play_startup_trill();
@@ -55,14 +57,18 @@ class Buzzer
     // Keep track of whether we're making noise or not!
     boolean quiet_mode_enabled_; 
 
+    // time constants for public use  
+    const static unsigned long MICROS_IN_MILLI_         = 1000; 
+
     // constants for pleasing auditory button press confirmations 
-    const unsigned long CHIRP_LIFESPAN_MILLIS_  = 200; 
-    const int CHIRP_NOTE_                       = NOTES::NOTE_F7; 
+    const static unsigned long DEFAULT_CHIRP_DURATION_  = 200 * MICROS_IN_MILLI_;   // micros
+    const int CHIRP_NOTE_                               = NOTES::NOTE_F7; 
 
     // constants for noticable auditory hit-registered confirmation 
-    const int SHRIEK_NOTE_                      = NOTES::NOTE_D7; 
+    const static unsigned long DEFAULT_BUZZ_DURATION_   = 1500 * MICROS_IN_MILLI_;  // micros
+    const int BUZZ_NOTE_                                = NOTES::NOTE_C8; //NOTES::NOTE_D7; 
 
-    const unsigned long BUZZER_DURATION_MICROS_ = 1000000;      // length of time the buzzer is kept on after a hit (microseconds)
+
 
     // note frequency constant definitions 
     enum NOTES
