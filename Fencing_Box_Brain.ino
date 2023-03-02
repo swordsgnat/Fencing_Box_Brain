@@ -4,7 +4,7 @@
 //  Dev     : Wnew (base), Nate Cope (updates)                                //
 //  Date    : Nov  2012 (base)                                                //
 //  Updated : Sept 2015 (base), Sept 2022 - Jan 2023 (updates)                //
-//  Version : 2.1                                                             //
+//  Version : 2.2                                                             //
 //  Notes   : 1. [inherited] Basis of algorithm from digitalwestie on github. // 
 //                           Thanks Mate                                      //
 //            2. [inherited] Used uint8_t instead of unsigned long where      //
@@ -64,14 +64,13 @@ const uint8_t CLOCK_TIME_DECREMENT_BUTTON_PIN_      = 5;    // Button for decrea
 const uint8_t QUIET_MODE_BUTTON_PIN_                = 0;    // NO OP CURRENTLY TODO CHECK CHECKButton for turning buzzer off, pin AKA 
 
 // Fencing Equipment Input Pins
-const uint8_t LEFT_FENCER_B_WEAPON_LINE_PIN_        = 17;   // C line input, pin AKA A3
+const uint8_t FOIL_CONTINUITY_PIN_                  = 17;   // C line input, pin AKA A3
 const uint8_t LEFT_FENCER_A_LAME_LINE_PIN_          = 18;   // A line input, Epee return path, pin AKA A4
-const uint8_t RIGHT_FENCER_B_WEAPON_LINE_PIN_       = 19;   // C line input, pin AKA A5
 const uint8_t RIGHT_FENCER_A_LAME_LINE_PIN_         = 4;    // A line input, Epee return path
 
 // Fencing Equipment Output Pins
-const uint8_t LEFT_FENCER_B_WEAPON_LINE_POWER_PIN_  = 5;    // decides whether left  fencer weapon is powered
-const uint8_t RIGHT_FENCER_B_WEAPON_LINE_POWER_PIN_ = 2;    // decides whether right fencer weapon is powered
+const uint8_t LEFT_POWER_HIGH_RIGHT_POWER_LOW_PIN_  = 5;    // HIGH means left fencer B line is powered and right fencer B line isn't.      LOW means the opposite. 
+const uint8_t LEFT_LAME_ON_RIGHT_LAME_OFF_PIN_      = 2;    // HIGH means left lame able to receive signal and right lame is disconnected.  LOW means the opposite. 
 
 
 // Output Pins
@@ -139,14 +138,6 @@ const unsigned long SABER_CONTACT_MICROS_  = 100;
 const unsigned long FOIL_CONTACT_MICROS_   = 13000;
 const unsigned long EPEE_CONTACT_MICROS_   = 2000;
 
-// Analog read constants (may need tuning)
-const unsigned long ANALOG_READ_ON_TARGET_THRESHOLD_LOW_            = 450;//400;
-const unsigned long ANALOG_READ_ON_TARGET_THRESHOLD_HIGH_           = 600;//600;
-const unsigned long ANALOG_READ_ON_TARGET_THRESHOLD_LOW_SABER_      = 300;//400;
-const unsigned long ANALOG_READ_ON_TARGET_THRESHOLD_HIGH_SABER_     = 450;//600;
-const unsigned long ANALOG_READ_OFF_TARGET_B_THRESHOLD_HIGH_        = 100;//100;
-const unsigned long ANALOG_READ_OFF_TARGET_A_THRESHOLD_LOW_         = 900;//900;
-
 // Debugging constants
 const unsigned long CYCLES_PER_TIMING_EVENT_ = 5000; 
 
@@ -191,10 +182,9 @@ uint8_t       most_recent_time_adjustment_level_            = 0;
 bool          did_time_reset_                               = false; 
 
 // weapon line statuses 
-bool left_fencer_b_weapon_line_reading_high_  = false;
-bool right_fencer_b_weapon_line_reading_high_ = false;
-bool left_fencer_a_lame_line_reading_high_    = false;
-bool right_fencer_a_lame_line_reading_high_   = false;
+bool dual_foil_continuity_line_reading_high_                = false;
+bool left_fencer_a_lame_line_reading_high_                  = false;
+bool right_fencer_a_lame_line_reading_high_                 = false;
 
 // hit interpretation variables
 unsigned long left_fencer_contact_start_time_         = 0;
@@ -236,14 +226,13 @@ void setup()
   //pinMode(CLOCK_TIME_DECREMENT_BUTTON_PIN_,     INPUT_PULLUP); // currently no-op, outta pins 
   // pinMode(QUIET_MODE_BUTTON_PIN_,               INPUT_PULLUP);  //NO-OP CURRENTLY; doesn't exist 
   
-  pinMode(LEFT_FENCER_B_WEAPON_LINE_PIN_,              INPUT);
-  pinMode(LEFT_FENCER_A_LAME_LINE_PIN_,                INPUT);
-  pinMode(RIGHT_FENCER_B_WEAPON_LINE_PIN_,             INPUT);
-  pinMode(RIGHT_FENCER_A_LAME_LINE_PIN_,               INPUT);
+  pinMode(FOIL_CONTINUITY_PIN_,                 INPUT);
+  pinMode(LEFT_FENCER_A_LAME_LINE_PIN_,         INPUT);
+  pinMode(RIGHT_FENCER_A_LAME_LINE_PIN_,        INPUT);
 
-  // set up the weapn power pins 
-  pinMode(LEFT_FENCER_B_WEAPON_LINE_POWER_PIN_,  OUTPUT);
-  pinMode(RIGHT_FENCER_B_WEAPON_LINE_POWER_PIN_, OUTPUT);
+  // set up the selective circuit pins  
+  pinMode(LEFT_POWER_HIGH_RIGHT_POWER_LOW_PIN_, OUTPUT);
+  pinMode(LEFT_LAME_ON_RIGHT_LAME_OFF_PIN_,     OUTPUT);
 
   scoreboard_ = new Fencing_Point_Displays( LEFT_FENCER_SCORE_DISPLAY_CLK_PIN_,
                                             LEFT_FENCER_SCORE_DISPLAY_DATA_PIN_,
@@ -293,87 +282,91 @@ void loop()
     handle_mode_switch_button();
     //handle_quiet_mode_button();  // currently NO-OP, button doesn't exist 
 
-    // set up the left fencer's weapon to be the only one powered 
-    digitalWrite(LEFT_FENCER_B_WEAPON_LINE_POWER_PIN_, HIGH);
-    digitalWrite(RIGHT_FENCER_B_WEAPON_LINE_POWER_PIN_, LOW);
+    // turn left fencer circuit power on, and right fencer circuit power off 
+    digitalWrite(LEFT_POWER_HIGH_RIGHT_POWER_LOW_PIN_, HIGH);
 
-    // get the status of the relevant input pins (right C line doesn't matter) 
-    left_fencer_b_weapon_line_reading_high_  = digitalRead(LEFT_FENCER_B_WEAPON_LINE_PIN_);
-    left_fencer_a_lame_line_reading_high_    = digitalRead(LEFT_FENCER_A_LAME_LINE_PIN_);
-    right_fencer_a_lame_line_reading_high_   = digitalRead(RIGHT_FENCER_A_LAME_LINE_PIN_);
+    // enable the left lame circuit and disable the right lame circuit 
+    digitalWrite(LEFT_LAME_ON_RIGHT_LAME_OFF_PIN_,     HIGH);
 
-    // interpret hit for left fencer (based on mode) // basically free, timewise [before hit registered)
+    // get status of the enabled lame (self)
+    left_fencer_a_lame_line_reading_high_       = digitalRead(LEFT_FENCER_A_LAME_LINE_PIN_);
+    
+    // disable the left lame circuit and enable the right lame circuit 
+    digitalWrite(LEFT_LAME_ON_RIGHT_LAME_OFF_PIN_,     LOW);
+
+    // get the status of the enabled lame (the target this time) 
+    right_fencer_a_lame_line_reading_high_      = digitalRead(RIGHT_FENCER_A_LAME_LINE_PIN_);
+
+    // if you're in foil, check the continuity pin to find potential off-targets. Otherwise don't waste the time. 
+    if (current_mode_ == mode::FOIL)
+    {
+      dual_foil_continuity_line_reading_high_   = digitalRead(FOIL_CONTINUITY_PIN_);
+    }
+    else
+    { 
+      dual_foil_continuity_line_reading_high_   = false; 
+    }
+    
+    // interpret hit for left fencer (based on mode) [basically free, timewise, at least before hit is registered]
     process_hits(current_time, true);
+    
+    // turn left fencer circuit power off, and right fencer circuit power on
+    digitalWrite(LEFT_POWER_HIGH_RIGHT_POWER_LOW_PIN_, LOW);
+    
+    // left lame circuit should already be disabled, and right lame circuit enabled, so don't waste the time 
+    //digitalWrite(LEFT_LAME_ON_RIGHT_LAME_OFF_PIN_,     LOW);
 
-    // set up the left fencer's weapon to be the only one powered 
-    digitalWrite(LEFT_FENCER_B_WEAPON_LINE_POWER_PIN_,   LOW);
-    digitalWrite(RIGHT_FENCER_B_WEAPON_LINE_POWER_PIN_, HIGH);
+    // get status of the enabled lame (self)
+    right_fencer_a_lame_line_reading_high_      = digitalRead(RIGHT_FENCER_A_LAME_LINE_PIN_);
 
-    right_fencer_b_weapon_line_reading_high_ = digitalRead(RIGHT_FENCER_B_WEAPON_LINE_PIN_);
-    left_fencer_a_lame_line_reading_high_    = digitalRead(LEFT_FENCER_A_LAME_LINE_PIN_);
-    right_fencer_a_lame_line_reading_high_   = digitalRead(RIGHT_FENCER_A_LAME_LINE_PIN_);
+    // enable the left lame circuit and disable the right lame circuit 
+    digitalWrite(LEFT_LAME_ON_RIGHT_LAME_OFF_PIN_,     HIGH);
 
-    // interpret hit for right fencer (based on mode) // basically free, timewise [before hit registered)
+    // get the status of the enabled lame (the target this time) 
+    left_fencer_a_lame_line_reading_high_       = digitalRead(LEFT_FENCER_A_LAME_LINE_PIN_);
+
+    // if you're in foil, check the continuity pin to find potential off-targets. Otherwise don't waste the time. 
+    if (current_mode_ == mode::FOIL)
+    {
+      dual_foil_continuity_line_reading_high_   = digitalRead(FOIL_CONTINUITY_PIN_);
+    }
+    else
+    { 
+      dual_foil_continuity_line_reading_high_   = false; 
+    }
+
+    // interpret hit for right fencer (based on mode) [basically free, timewise, at least before hit is registered])
     process_hits(current_time, false);
 
-    // react to equipment inputs as necessary // basically free, timewise [before hit registered)
+    // react to equipment inputs as necessary [basically free, timewise, at least before hit is registered]
     signal_hits(current_time);
 
 
-    // weapons bugtesting 
+    // weapons bugtesting // TODO this mode is broken with the switch to digitalReads, needs a REDO
     if (DEBUG == 1)
     {
-      bool do_analogs  = true; 
-      bool do_digitals = false; 
+      int dual_foil_continuity_line_reading_high_digital  , 
+          right_fencer_b_weapon_line_reading_high_digital , 
+          left_fencer_a_lame_line_reading_high_digital    , 
+          right_fencer_a_lame_line_reading_high_digital   ; 
 
-      const int MAX_ANALOG = 1;//1023.0; 
 
-      int left_fencer_b_weapon_line_reading_high_digital, right_fencer_b_weapon_line_reading_high_digital, left_fencer_a_lame_line_reading_high_digital, right_fencer_a_lame_line_reading_high_digital; 
+      dual_foil_continuity_line_reading_high_digital  = digitalRead(FOIL_CONTINUITY_PIN_);
+      left_fencer_a_lame_line_reading_high_digital    = digitalRead(LEFT_FENCER_A_LAME_LINE_PIN_);
+      right_fencer_a_lame_line_reading_high_digital   = digitalRead(LEFT_FENCER_A_LAME_LINE_PIN_);
 
-      if (do_digitals)
-      {
-        left_fencer_b_weapon_line_reading_high_digital  = digitalRead(LEFT_FENCER_B_WEAPON_LINE_PIN_)  == 0 ? 0 : 500;
-        right_fencer_b_weapon_line_reading_high_digital = digitalRead(RIGHT_FENCER_B_WEAPON_LINE_PIN_) == 0 ? 0 : 525;
-        left_fencer_a_lame_line_reading_high_digital    = digitalRead(LEFT_FENCER_A_LAME_LINE_PIN_)    == 0 ? 0 : 450;
-        right_fencer_a_lame_line_reading_high_digital   = digitalRead(LEFT_FENCER_A_LAME_LINE_PIN_)    == 0 ? 0 : 475;
-      }
+      Serial.print(",");
+      Serial.print("(not)_off_targ_d:");
+      Serial.print(dual_foil_continuity_line_reading_high_digital);
+      Serial.print(",");
+      
+      Serial.print("left_lame_d:");
+      Serial.print(left_fencer_a_lame_line_reading_high_digital);
+      Serial.print(",");
 
-      if (do_analogs)
-      { 
-        Serial.print("left_weap:");
-        Serial.print((float)left_fencer_b_weapon_line_reading_high_ / MAX_ANALOG);
-        Serial.print(",");
-  
-        Serial.print("left_lame:");
-        Serial.print((float)left_fencer_a_lame_line_reading_high_ / MAX_ANALOG);
-        Serial.print(",");
-  
-        Serial.print("right_weap:");
-        Serial.print((float)right_fencer_b_weapon_line_reading_high_ / MAX_ANALOG);
-        Serial.print(",");
-  
-        Serial.print("right_lame:");
-        Serial.print((float)right_fencer_a_lame_line_reading_high_ / MAX_ANALOG);
-      }
+      Serial.print("right_lame_d:");
+      Serial.print(right_fencer_a_lame_line_reading_high_digital);
 
-      if (do_digitals)
-      {
-        Serial.print(",");
-        Serial.print("left_weap_d:");
-        Serial.print(left_fencer_b_weapon_line_reading_high_digital);
-        Serial.print(",");
-        
-        Serial.print("left_lame_d:");
-        Serial.print(left_fencer_a_lame_line_reading_high_digital);
-        Serial.print(",");
-  
-        Serial.print("right_weap_d:");
-        Serial.print(right_fencer_b_weapon_line_reading_high_digital);
-        Serial.print(",");
-  
-        Serial.print("right_lame_d:");
-        Serial.print(right_fencer_a_lame_line_reading_high_digital);
-      }
       
       Serial.println("");
     }
@@ -454,8 +447,10 @@ void loop()
 // process_hits - determines hit, lockout, and timeout statuses based on current equipment inputs and current mode
 //    parameter:  current_time - the time in microseconds passed since the last processing
 //    output:   none
+
+// TODO TODO REDO REDO 
 //================================================================================================================
-void process_hits(unsigned long current_time, bool left_fencer_weapon_powered)
+void process_hits(unsigned long current_time, bool left_fencer_weapon_powered) 
 {
   // first, check for hits!
 
@@ -467,24 +462,24 @@ void process_hits(unsigned long current_time, bool left_fencer_weapon_powered)
     {
       // if the left fencer's registering a hit, then add that time to their tally (or start the tally if they weren't already hitting) NB: these methods account for mode already
       if ( 
-           is_reading_on_target (left_fencer_b_weapon_line_reading_high_, right_fencer_a_lame_line_reading_high_, left_fencer_a_lame_line_reading_high_)   ||    
-           is_reading_off_target(left_fencer_b_weapon_line_reading_high_, right_fencer_a_lame_line_reading_high_, left_fencer_a_lame_line_reading_high_)
+           is_reading_on_target (right_fencer_a_lame_line_reading_high_ , left_fencer_a_lame_line_reading_high_)                                         ||    
+           is_reading_off_target(dual_foil_continuity_line_reading_high_, right_fencer_a_lame_line_reading_high_, left_fencer_a_lame_line_reading_high_)
          )  
       {
         if (!left_fencer_contact_made_)
         {
           // note the contact 
-          left_fencer_contact_made_ = true;
+          left_fencer_contact_made_             = true;
   
           // record when the contact started 
-          left_fencer_contact_start_time_ = current_time;
+          left_fencer_contact_start_time_       = current_time;
         }
       }
       else
       {
         // if there's no contact, then reset the counters
-        left_fencer_contact_made_       = false;
-        left_fencer_contact_start_time_ = 0;
+        left_fencer_contact_made_               = false;
+        left_fencer_contact_start_time_         = 0;
       }
   
       // if the left fencer is in contact and has exceeded the necessary contact time, mark a hit
@@ -498,16 +493,16 @@ void process_hits(unsigned long current_time, bool left_fencer_weapon_powered)
          )
       {
         // if you're foil, you gotta check if you're off target (NB: the method accounts for mode)
-        if (is_reading_off_target(left_fencer_b_weapon_line_reading_high_, right_fencer_a_lame_line_reading_high_, left_fencer_a_lame_line_reading_high_))
+        if (is_reading_off_target(dual_foil_continuity_line_reading_high_, right_fencer_a_lame_line_reading_high_, left_fencer_a_lame_line_reading_high_))
         {
-          left_fencer_hit_off_target_          = true;
-          left_fencer_time_of_registered_hit_  = current_time;
+          left_fencer_hit_off_target_           = true;
+          left_fencer_time_of_registered_hit_   = current_time;
         }
         // every other weapon can only get here by being on-target, as off-targets don't exist TODO TODO still check on target as an error checking measure???
         else
         {
-          left_fencer_hit_on_target_           = true;
-          left_fencer_time_of_registered_hit_  = current_time;
+          left_fencer_hit_on_target_            = true;
+          left_fencer_time_of_registered_hit_   = current_time;
         }
       } // end if just got a valid hit 
     } // end if not locked out or if already has a hit registered 
@@ -521,24 +516,24 @@ void process_hits(unsigned long current_time, bool left_fencer_weapon_powered)
     {
       // if the right fencer's registering a hit, then add that time to their tally (or start the tally if they weren't already hitting) NB: these methods account for mode already
       if ( 
-           is_reading_on_target (right_fencer_b_weapon_line_reading_high_, left_fencer_a_lame_line_reading_high_, right_fencer_a_lame_line_reading_high_)   ||    
-           is_reading_off_target(right_fencer_b_weapon_line_reading_high_, left_fencer_a_lame_line_reading_high_, right_fencer_a_lame_line_reading_high_)
+           is_reading_on_target (left_fencer_a_lame_line_reading_high_  , right_fencer_a_lame_line_reading_high_)                                         ||    
+           is_reading_off_target(dual_foil_continuity_line_reading_high_, left_fencer_a_lame_line_reading_high_ , right_fencer_a_lame_line_reading_high_)
          )  
       {
         if (!right_fencer_contact_made_)
         {
           // note the contact 
-          right_fencer_contact_made_ = true;
+          right_fencer_contact_made_            = true;
   
           // record when the contact started 
-          right_fencer_contact_start_time_ = current_time;
+          right_fencer_contact_start_time_      = current_time;
         }
       }
       else
       {
         // if there's no contact, then reset the counters
-        right_fencer_contact_made_       = false;
-        right_fencer_contact_start_time_ = 0;
+        right_fencer_contact_made_              = false;
+        right_fencer_contact_start_time_        = 0;
       }
   
       // if the right fencer is in contact and has exceeded the necessary contact time, mark a hit
@@ -552,16 +547,16 @@ void process_hits(unsigned long current_time, bool left_fencer_weapon_powered)
          )
       {
         // if you're foil, you gotta check if you're off target (NB: the method accounts for mode)
-        if (is_reading_off_target(right_fencer_b_weapon_line_reading_high_, left_fencer_a_lame_line_reading_high_, right_fencer_a_lame_line_reading_high_))
+        if (is_reading_off_target(dual_foil_continuity_line_reading_high_, left_fencer_a_lame_line_reading_high_, right_fencer_a_lame_line_reading_high_))
         {
-          right_fencer_hit_off_target_         = true;
-          right_fencer_time_of_registered_hit_ = current_time;
+          right_fencer_hit_off_target_          = true;
+          right_fencer_time_of_registered_hit_  = current_time;
         }
         // every other weapon can only get here by being on-target, as off-targets don't exist TODO TODO still check on target as an error checking measure???
         else
         {
-          right_fencer_hit_on_target_          = true;
-          right_fencer_time_of_registered_hit_ = current_time;
+          right_fencer_hit_on_target_           = true;
+          right_fencer_time_of_registered_hit_  = current_time;
         }
       } // end if just got a valid hit 
     } // end if not locked out or if already has a hit registered 
@@ -609,15 +604,18 @@ void process_hits(unsigned long current_time, bool left_fencer_weapon_powered)
 //    parameter:  unsigned long fencer_A_weapon_prong - the analog read value of one fencer's weapon line
 //    parameter:  unsigned long fencer_B_weapon_prong - the analog read value of the other fencer's one fencer's weapon line
 //    output:   bool, true if off-target contact is made, false otherwise
+
+
+// TODO TODO rework comments for off target 
 //==============================================================================================================================
-bool is_reading_off_target(bool fencer_A_weapon_high, bool fencer_B_lame_high, bool fencer_A_lame_high)
+bool is_reading_off_target(bool continuity_pin_high, bool fencer_B_lame_high, bool fencer_A_lame_high)  // TODO use "contiunity pin" instead of "off target", it's way clearer
 {
   bool result = false;
 
   if (current_mode_ == mode::FOIL) // "off-target" is meaningless outside of foil 
   {
-    // you're hitting something, but it's not a lame!
-    result = fencer_A_weapon_high && !(fencer_A_lame_high || fencer_B_lame_high);
+    // if you've lost weapon-circuit continuity but didn't hit either lame, that's an off-target! 
+    result = !continuity_pin_high && !(fencer_A_lame_high || fencer_B_lame_high);
   } 
 
   return result; 
@@ -625,54 +623,57 @@ bool is_reading_off_target(bool fencer_A_weapon_high, bool fencer_B_lame_high, b
 
 
 //==============================================================================================================================
-// TODO REDO REDO TODO 
+// TODO REDO REDO TODO ASSUMES ONLY ONE CIRCUIT IS POWERED AT A TIME 
 // is_reading_on_target - determines whether the provided analog values constitute an on-target contact
 //    parameter:  fencer_A_weapon_prong - the analog read value of one fencer's weapon line
 //    parameter:  fencer_B_weapon_prong - the analog read value of the other fencer's one fencer's weapon line
 //    output:   true if on-target contact is made, false otherwise
 //==============================================================================================================================
-bool is_reading_on_target(bool fencer_A_weapon_high, bool fencer_B_lame_high, bool fencer_A_lame_high)
+bool is_reading_on_target(bool target_lame_high, bool own_lame_high)
 {
   bool result = false;
 
   if      (current_mode_ == mode::SABER)
   {
-    result = fencer_B_lame_high;                              // in saber, it suffices just to check the target lame! Own weapon won't change, how we're wiring it 
+    result = target_lame_high;          // in saber, it suffices just to check the target lame! 
   }
   else if (current_mode_ == mode::FOIL)
   {
-    result = (fencer_A_weapon_high && fencer_B_lame_high);    // in foil, the A and target B lines (weapon and opponent lame) are joined on a hit, and                                                            //
-  }                                                           // the A line is also severed from the C line (weapon from own ground) allowing electricity to flow elsewhere 
+    result = target_lame_high;          // in foil, it also suffices just to check the target lame!                                                    
+  }                                                          
   else if (current_mode_ == mode::EPEE)
   {
-    result = (fencer_A_weapon_high && fencer_A_lame_high);    // in epee, the A and B lines (weapon and own lame) are joined on a hit 
+    result = own_lame_high;             // in epee, the A and B lines (weapon and own lame) are joined on a hit 
   }
 
   return result;
 }
 
 //==============================================================================================================================
-// TODO REDO REDO TODO ALL NEW 
+// TODO REDO REDO TODO ALL NEW ALSO ASSUMES ONLY ONE SIDE POWERED AT A TIME 
 // is_reading_on_target - determines whether the provided analog values constitute an on-target contact
 //    parameter:  fencer_A_weapon_prong - the analog read value of one fencer's weapon line
 //    parameter:  fencer_B_weapon_prong - the analog read value of the other fencer's one fencer's weapon line
 //    output:   true if on-target contact is made, false otherwise
+
+
+// TODO this is really a "hitting yourself" check, not a "short circuit" check. Are those the same thing??
 //==============================================================================================================================
-bool is_reading_short_circuit(bool fencer_A_weapon_high, bool fencer_B_lame_high, bool fencer_A_lame_high)
+bool is_reading_short_circuit(bool target_lame_high, bool own_lame_high)
 {
   bool result = false;
 
   if      (current_mode_ == mode::SABER)
   {
-    result = fencer_A_lame_high;                              // in saber, it suffices just to check the own lame! Own weapon won't change, how we're wiring it 
+    result = own_lame_high;               // in saber, it suffices just to check the own lame! 
   }
   else if (current_mode_ == mode::FOIL)
   {
-    result = (fencer_A_weapon_high && fencer_A_lame_high);    // in foil, the A and B lines (weapon and own lame) are joined on a self-hit, and                                                            //
-  }                                                           // the A line is also severed from the C line (weapon from own ground) allowing electricity to flow elsewhere 
+    result = own_lame_high;               // in foil, it also suffices just to check the own lame!                                                         
+  }                                                            
   else if (current_mode_ == mode::EPEE)
   {
-    result = false;                                           // this is just possible in epee. Try not to hit yourself! 
+    result = false;                       // There really isn't a "short circuit" in epee. You can just hit yourself. Try not to do that! 
   }
 
   return result;
